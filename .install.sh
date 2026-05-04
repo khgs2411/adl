@@ -2,23 +2,45 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.3.2"
+VERSION="0.4.1"
 UPDATE=0
-case "${1:-}" in
-  "") ;;
-  --update) UPDATE=1 ;;
-  *) print -r -- "Usage: .install.sh [--update]" >&2; exit 2 ;;
-esac
-SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
-ADL_TARGET="$SKILLS_DIR/adl"
-CONNECT_TARGET="$SKILLS_DIR/adl-connect"
-BACKUP_ROOT="$SKILLS_DIR/.adl-project-backups"
-MARKER="$ADL_TARGET/.adl-framework"
+TARGET_RUNTIME="all"
+BUMP_MODE="patch"
+BUMP_MODE_SET=0
+
+usage() {
+  print -r -- "Usage: .install.sh [--update] [--minor|--major] [--codex|--claude]" >&2
+}
+
+set_bump_mode() {
+  local mode="$1"
+  if [[ "$BUMP_MODE_SET" == "1" ]]; then
+    usage
+    exit 2
+  fi
+  BUMP_MODE="$mode"
+  BUMP_MODE_SET=1
+  UPDATE=1
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --update) UPDATE=1 ;;
+    --minor) set_bump_mode minor ;;
+    --major) set_bump_mode major ;;
+    --codex) TARGET_RUNTIME="codex" ;;
+    --claude) TARGET_RUNTIME="claude" ;;
+    *) usage; exit 2 ;;
+  esac
+  shift
+done
+
 CP="/bin/cp"
 CHMOD="/bin/chmod"
 DATE="/bin/date"
 MKDIR="/bin/mkdir"
 RM="/bin/rm"
+PERL="/usr/bin/perl"
 
 require_file() {
   [[ -f "$1" ]] || {
@@ -27,40 +49,116 @@ require_file() {
   }
 }
 
-require_file "$ROOT/skills/adl/SKILL.md"
-require_file "$ROOT/skills/adl-connect/SKILL.md"
 require_file "$ROOT/scripts/adl"
 require_file "$ROOT/scripts/ghostty-macos"
 
-"$MKDIR" -p "$SKILLS_DIR"
+bumped_version() {
+  local mode="$1"
+  local version="$2"
+  local parts major minor patch
 
-if [[ -d "$ADL_TARGET" && ! -f "$MARKER" ]]; then
-  ts="$("$DATE" +%Y%m%d-%H%M%S)"
-  backup="$BACKUP_ROOT/$ts/adl"
-  "$MKDIR" -p "$backup:h"
-  "$CP" -R "$ADL_TARGET" "$backup"
-  print -r -- "Backed up existing adl skill to: $backup"
-  print -r -- "Rollback: \"$RM\" -rf '$ADL_TARGET' && \"$CP\" -R '$backup' '$ADL_TARGET'"
+  parts=("${(@s:.:)version}")
+  [[ "${#parts[@]}" == "3" ]] || {
+    print -r -- "Invalid VERSION: $version" >&2
+    exit 5
+  }
+
+  major="${parts[1]}"
+  minor="${parts[2]}"
+  patch="${parts[3]}"
+
+  case "$mode" in
+    major) major=$((major + 1)); minor=0; patch=0 ;;
+    minor) minor=$((minor + 1)); patch=0 ;;
+    patch) patch=$((patch + 1)) ;;
+  esac
+
+  print -r -- "$major.$minor.$patch"
+}
+
+replace_version_in_file() {
+  local file="$1"
+  local version="$2"
+
+  "$PERL" -0pi -e 's/VERSION="[0-9]+\.[0-9]+\.[0-9]+"/VERSION="'$version'"/' "$file"
+}
+
+if [[ "$UPDATE" == "1" ]]; then
+  VERSION="$(bumped_version "$BUMP_MODE" "$VERSION")"
+  replace_version_in_file "$ROOT/.install.sh" "$VERSION"
+  replace_version_in_file "$ROOT/scripts/adl" "$VERSION"
 fi
 
-if [[ -f "$MARKER" && "$UPDATE" != "1" ]]; then
-  print -r -- "ADL framework already installed at $ADL_TARGET"
-  print -r -- "Run ./.install.sh --update to replace it with version $VERSION."
-  exit 0
-fi
+install_runtime() {
+  local runtime="$1"
+  local skills_dir source_skills_dir runtime_label update_hint
 
-"$RM" -rf "$ADL_TARGET" "$CONNECT_TARGET"
-"$MKDIR" -p "$ADL_TARGET/scripts" "$CONNECT_TARGET"
+  if [[ "$runtime" == "claude" ]]; then
+    skills_dir="${ADL_CLAUDE_SKILLS_DIR:-/Users/liadgoren/.claude/skills}"
+    source_skills_dir="$ROOT/skills-claude"
+    runtime_label="ADL Claude framework"
+    update_hint="./.install.sh --claude --update"
+    if [[ "$TARGET_RUNTIME" == "all" ]]; then
+      update_hint="./.install.sh --update --claude"
+    fi
+  else
+    skills_dir="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
+    source_skills_dir="$ROOT/skills"
+    runtime_label="ADL framework"
+    update_hint="./.install.sh --update"
+    if [[ "$TARGET_RUNTIME" == "all" ]]; then
+      update_hint="./.install.sh --update --codex"
+    fi
+  fi
 
-"$CP" "$ROOT/skills/adl/SKILL.md" "$ADL_TARGET/SKILL.md"
-"$CP" "$ROOT/skills/adl-connect/SKILL.md" "$CONNECT_TARGET/SKILL.md"
-"$CP" "$ROOT/scripts/adl" "$ADL_TARGET/scripts/adl"
-"$CP" "$ROOT/scripts/ghostty-macos" "$ADL_TARGET/scripts/ghostty-macos"
-"$CHMOD" +x "$ADL_TARGET/scripts/adl" "$ADL_TARGET/scripts/ghostty-macos"
+  local adl_target="$skills_dir/adl"
+  local connect_target="$skills_dir/adl-connect"
+  local backup_root="$skills_dir/.adl-project-backups"
+  local marker="$adl_target/.adl-framework"
 
-{
-  print -r -- "ADL_VERSION='$VERSION'"
-  print -r -- "ADL_SOURCE='$ROOT'"
-} > "$MARKER"
+  require_file "$source_skills_dir/adl/SKILL.md"
+  require_file "$source_skills_dir/adl-connect/SKILL.md"
 
-print -r -- "Installed ADL framework $VERSION into $SKILLS_DIR"
+  "$MKDIR" -p "$skills_dir"
+
+  if [[ -d "$adl_target" && ! -f "$marker" ]]; then
+    local ts backup
+    ts="$("$DATE" +%Y%m%d-%H%M%S)"
+    backup="$backup_root/$ts/adl"
+    "$MKDIR" -p "$backup:h"
+    "$CP" -R "$adl_target" "$backup"
+    print -r -- "Backed up existing adl skill to: $backup"
+    print -r -- "Rollback: \"$RM\" -rf '$adl_target' && \"$CP\" -R '$backup' '$adl_target'"
+  fi
+
+  if [[ -f "$marker" && "$UPDATE" != "1" ]]; then
+    print -r -- "$runtime_label already installed at $adl_target"
+    print -r -- "Run $update_hint to replace it with version $VERSION."
+    return 0
+  fi
+
+  "$RM" -rf "$adl_target" "$connect_target"
+  "$MKDIR" -p "$adl_target/scripts" "$connect_target"
+
+  "$CP" "$source_skills_dir/adl/SKILL.md" "$adl_target/SKILL.md"
+  "$CP" "$source_skills_dir/adl-connect/SKILL.md" "$connect_target/SKILL.md"
+  "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
+  "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
+  "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"
+
+  {
+    print -r -- "ADL_VERSION='$VERSION'"
+    print -r -- "ADL_SOURCE='$ROOT'"
+  } > "$marker"
+
+  print -r -- "Installed $runtime_label $VERSION into $skills_dir"
+}
+
+case "$TARGET_RUNTIME" in
+  codex) install_runtime codex ;;
+  claude) install_runtime claude ;;
+  all)
+    install_runtime codex
+    install_runtime claude
+    ;;
+esac

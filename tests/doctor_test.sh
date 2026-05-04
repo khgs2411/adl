@@ -12,6 +12,7 @@ WORKDIR="$PWD"
 export ADL_GHOSTTY_DRY_RUN=1
 export ADL_SCRIPT_ROOT="$ROOT/scripts"
 export ADL_CODEX_SKILLS_DIR="$TMP/skills"
+expected_cli_version="$(grep '^VERSION=' "$ROOT/scripts/adl" | sed 's/VERSION="//;s/"//')"
 
 mkdir -p "$ADL_CODEX_SKILLS_DIR/adl"
 cat > "$ADL_CODEX_SKILLS_DIR/adl/.adl-framework" <<MARKER
@@ -20,7 +21,7 @@ ADL_SOURCE='$ROOT'
 MARKER
 
 empty_doctor="$("$ROOT/scripts/adl" doctor)"
-assert_contains "$empty_doctor" "cli.version: 0.3.2" "doctor should print CLI version"
+assert_contains "$empty_doctor" "cli.version: $expected_cli_version" "doctor should print CLI version"
 assert_contains "$empty_doctor" "log.enabled: 1" "doctor should print log enabled state"
 assert_contains "$empty_doctor" "log.path: $WORKDIR/.adl/adl.log" "doctor should print log path"
 assert_contains "$empty_doctor" "adl.dir: missing" "doctor should report missing .adl"

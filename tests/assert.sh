@@ -21,6 +21,13 @@ assert_contains() {
   [[ "$haystack" == *"$needle"* ]] || fail "$message: missing [$needle] in [$haystack]"
 }
 
+assert_not_contains() {
+  local haystack="$1"
+  local needle="$2"
+  local message="$3"
+  [[ "$haystack" != *"$needle"* ]] || fail "$message: unexpected [$needle] in [$haystack]"
+}
+
 assert_file_exists() {
   local path="$1"
   [[ -f "$path" ]] || fail "expected file to exist: $path"

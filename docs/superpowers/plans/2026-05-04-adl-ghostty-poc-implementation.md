@@ -838,7 +838,7 @@ send_dev() {
   env_set "$sf" ADL_ACTIVE_RUN "$rid"
   env_set "$sf" ADL_STATUS "$status"
   if [[ -n "$dev_term" ]]; then
-    "$GHOSTTY" send "$dev_term" "Architect's Request:\n\nRead and execute:\n$rdir/dev-prompt.md\n\nWhen done, write:\n$rdir/dev-report.md\n\nThen notify Architect:\n/Users/liadgoren/.codex/skills/adl/scripts/adl dev notify" >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry."
+    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md, then run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry."
     env_set "$rdir/run.env" ADL_RUN_STATUS sent_to_dev
     env_set "$rdir/run.env" ADL_SENT_AT "$(now_ts)"
     env_set "$sf" ADL_STATUS sent_to_dev
@@ -921,7 +921,7 @@ notify_dev() {
   env_set "$rdir/run.env" ADL_REPORTED_AT "$(now_ts)"
   env_set "$sf" ADL_STATUS reported
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
-  "$GHOSTTY" send "$arch_term" "Developer's Report:\n\nRead:\n$report\n\nReview against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by invoking \$adl."
+  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by invoking \$adl."
   print -r -- "Developer's Report sent."
 }
 

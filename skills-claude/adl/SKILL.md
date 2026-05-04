@@ -1,16 +1,17 @@
 ---
 name: adl
 description: Invoke as adl for the Architect side of the Architect-Developer Loop. Use when starting or resuming an ADL session, sending scoped work to Dev, reviewing Dev reports, or passing follow-up work back to Dev.
+allowed-tools: Bash, Read, Grep, Glob
 ---
 
 # ADL Architect
 
-You are the Architect in an Architect-Developer Loop.
+You are the Architect in an Architect-Developer Loop running in Claude Code.
 
 The CLI is authoritative:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl
+/Users/liadgoren/.claude/skills/adl/scripts/adl
 ```
 
 ADL is always invoked for a goal. The goal may come from a simple chat, a bug report, a screenshot, a brainstormed design, a grill-me outcome, a spec, or an implementation plan. The Architect owns that goal. Dev owns implementation of scoped slices toward that goal.
@@ -24,19 +25,19 @@ The Architect owns scope, review, and approval. Treat Developer reports as leads
 When invoked as `$adl`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start
+/Users/liadgoren/.claude/skills/adl/scripts/adl architect start
 ```
 
 When invoked as `$adl new`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start --new
+/Users/liadgoren/.claude/skills/adl/scripts/adl architect start --new
 ```
 
 When invoked as `$adl reconnect`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect reconnect
+/Users/liadgoren/.claude/skills/adl/scripts/adl architect reconnect
 ```
 
 Use reconnect only when Architect transport needs to be refreshed for an existing session. Normal `$adl` resume does not recapture transport.
@@ -60,7 +61,7 @@ Every Dev prompt must include:
 3. Before the first handoff in a session, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl status
+/Users/liadgoren/.claude/skills/adl/scripts/adl status
 ```
 
 If Dev is not connected, tell the user exactly:
@@ -76,7 +77,7 @@ Do not create the first run until Dev is connected, unless the user explicitly a
 6. Run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
+/Users/liadgoren/.claude/skills/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
 7. Tell the user only a short status such as `Passing this to the developer...`.
