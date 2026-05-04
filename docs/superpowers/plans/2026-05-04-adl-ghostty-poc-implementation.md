@@ -13,7 +13,7 @@
 ## File Structure
 
 - Create: `skills/adl/SKILL.md`  
-  Architect-side Codex skill. Starts/resumes ADL, writes Dev prompts to `.adl/tmp/`, and sends them without printing full prompt text.
+  Architect-side Codex skill. Starts/resumes ADL, writes Dev prompts to `.adl/staging/`, and sends them without printing full prompt text.
 
 - Create: `skills/adl-connect/SKILL.md`  
   Dev-side Codex skill. Connects/reconnects to a pin, reads `dev-brief.md`, follows `Architect's Request:` files, writes `dev-report.md`, and runs notify.
@@ -481,9 +481,9 @@ again="$("$ROOT/scripts/adl" architect start)"
 assert_contains "$again" "Resumed ADL session" "second start should resume"
 assert_eq "$session_id" "$(cat .adl/active-session)" "active session should be reused"
 
-mkdir -p .adl/tmp
-print -r -- "Implement task A" > .adl/tmp/prompt.md
-send_before="$("$ROOT/scripts/adl" architect send-dev --prompt-file .adl/tmp/prompt.md)"
+mkdir -p .adl/staging
+print -r -- "Implement task A" > .adl/staging/prompt.md
+send_before="$("$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt.md)"
 assert_contains "$send_before" "Dev is not connected" "send before connect should be pending"
 assert_file_exists ".adl/sessions/$session_id/runs/001/dev-prompt.md"
 assert_eq "Implement task A" "$(cat .adl/sessions/$session_id/runs/001/dev-prompt.md)" "prompt should be copied"
@@ -524,11 +524,11 @@ REPORT
 notify="$("$ROOT/scripts/adl" dev notify)"
 assert_contains "$notify" "Developer's Report sent" "notify should wake architect"
 
-mkdir -p .adl/tmp
-print -r -- "Implement task B" > .adl/tmp/prompt2.md
-"$ROOT/scripts/adl" architect send-dev --prompt-file .adl/tmp/prompt2.md >/dev/null
-print -r -- "Implement task C" > .adl/tmp/prompt3.md
-supersede="$("$ROOT/scripts/adl" architect send-dev --prompt-file .adl/tmp/prompt3.md)"
+mkdir -p .adl/staging
+print -r -- "Implement task B" > .adl/staging/prompt2.md
+"$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt2.md >/dev/null
+print -r -- "Implement task C" > .adl/staging/prompt3.md
+supersede="$("$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt3.md)"
 assert_contains "$supersede" "superseded" "new active run should supersede previous pending run"
 assert_file_exists ".adl/sessions/$session_id/runs/003/dev-prompt.md"
 
@@ -608,7 +608,7 @@ SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
 ADL_DIR=".adl"
 SESSIONS_DIR="$ADL_DIR/sessions"
-TMP_DIR="$ADL_DIR/tmp"
+STAGING_DIR="$ADL_DIR/staging"
 ACTIVE_FILE="$ADL_DIR/active-session"
 DATE="/bin/date"
 CAT="/bin/cat"
@@ -734,7 +734,7 @@ capture_role() {
 }
 
 create_session() {
-  "$MKDIR" -p "$SESSIONS_DIR" "$TMP_DIR"
+  "$MKDIR" -p "$SESSIONS_DIR" "$STAGING_DIR"
   local p sid sdir
   p="$(pin)"
   sid="$(session_id_for_pin "$p")"
@@ -814,7 +814,7 @@ send_dev() {
   [[ "${1:-}" == "--prompt-file" ]] || die "Usage: adl architect send-dev --prompt-file <path>"
   local prompt="${2:-}"
   [[ -f "$prompt" ]] || die "Missing prompt file: $prompt"
-  [[ "$prompt" == .adl/tmp/* ]] || die "Prompt file must be under .adl/tmp/"
+  [[ "$prompt" == .adl/staging/* ]] || die "Prompt file must be under .adl/staging/"
   local sid sf active rid rdir dev_term status
   sid="$(require_active_session)"
   sf="$(session_file "$sid")"
@@ -1022,8 +1022,8 @@ When invoked as `$adl new`, run:
 When you have a Dev handoff or follow-up:
 
 1. Do not print the full Dev prompt in chat.
-2. Ensure `.adl/tmp/` exists.
-3. Write the full prompt to `.adl/tmp/<timestamp>-dev-prompt.md`.
+2. Ensure `.adl/staging/` exists.
+3. Write the full prompt to `.adl/staging/<timestamp>-dev-prompt.md`.
 4. Run:
 
 ```text

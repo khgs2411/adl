@@ -179,10 +179,10 @@ In ADL-connected mode, the Architect does not print the full Dev prompt in chat.
 Instead:
 
 1. Architect says a short status such as `Passing this to the developer...`.
-2. Architect writes the full handoff to a temporary prompt file under `.adl/tmp/`.
+2. Architect writes the full handoff to a staging prompt file under `.adl/staging/`.
 3. Architect invokes the send command with that prompt file.
 4. The CLI creates the next run and copies the prompt into `dev-prompt.md`.
-5. The CLI removes the temporary prompt file after a successful copy.
+5. The CLI removes the staging prompt file after a successful copy.
 6. Ghostty injects a short wake-up into the Dev pane.
 
 Send command:
@@ -195,7 +195,7 @@ Rules:
 
 - `--prompt-file` is required.
 - The prompt file must exist.
-- The prompt file must be under the current working directory's `.adl/tmp/`.
+- The prompt file must be under the current working directory's `.adl/staging/`.
 - The CLI allocates the next run ID.
 - The CLI copies the prompt file to the new run's `dev-prompt.md` using atomic write behavior.
 - The CLI must not echo the prompt content to stdout.
@@ -415,7 +415,7 @@ Architect skill behavior:
 
 - `$adl` starts or resumes the active session.
 - `$adl new` creates a fresh session.
-- When ready to hand work to Dev, the skill writes the full prompt to `.adl/tmp/<timestamp>-dev-prompt.md`.
+- When ready to hand work to Dev, the skill writes the full prompt to `.adl/staging/<timestamp>-dev-prompt.md`.
 - The skill then runs `adl architect send-dev --prompt-file <path>` using the absolute CLI path.
 - The skill must not print the full Dev prompt in chat.
 
@@ -431,7 +431,7 @@ Dev skill behavior:
 | --- | --- | --- | --- | --- |
 | `adl architect start` | Architect | current cwd | Create or resume active session; create `.adl/` if needed; record Architect transport; print pin/status. | Print actionable error if `.adl` cannot be created or transport capture fails. |
 | `adl architect start --new` | Architect | current cwd | Mark old active session closed, create new session, print new pin/status. | Preserve old artifacts on failure. |
-| `adl architect send-dev --prompt-file <path>` | Architect | prompt file under `.adl/tmp/` | Allocate run, copy prompt to `dev-prompt.md`, update active run, wake Dev if connected, remove temp prompt after copy. | Reject missing/invalid prompt file; never echo prompt; preserve temp prompt on failure. |
+| `adl architect send-dev --prompt-file <path>` | Architect | prompt file under `.adl/staging/` | Allocate run, copy prompt to `dev-prompt.md`, update active run, wake Dev if connected, remove staging prompt after copy. | Reject missing/invalid prompt file; never echo prompt; preserve staging prompt on failure. |
 | `adl dev connect <pin>` | Dev | pin, current cwd | Find matching session in current `.adl/`, record Dev transport, create `dev-brief.md` only if missing, show pending active request if present. | Reject wrong cwd or unknown pin with exact next step. |
 | `adl dev connect <pin> --replace` | Dev | pin, current cwd | Replace Dev transport metadata and increment generation; do not rewrite `dev-brief.md`. | Reject unknown pin or invalid session. |
 | `adl dev notify` | Dev | current cwd | Infer active run, require `dev-report.md`, mark reported, wake Architect. | Reject missing session, no active run, superseded run, or missing report with exact expected path and template. |
