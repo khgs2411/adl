@@ -37,10 +37,16 @@ Connection invalid
 
 If that happens, rerun the exact same CLI command with escalation/outside-sandbox access. Do not change the pin or drop `--replace`.
 
-After connecting, read the printed `dev-brief.md`. For every `Architect's Request:`, read the requested `dev-prompt.md`, execute only that scope, write `dev-report.md`, and run:
+After a successful connection, ADL notifies Architect that Dev is connected and ready. Read the printed `dev-brief.md`, then wait for the first `Architect's Request:` instead of starting work on your own.
+
+For every `Architect's Request:`, read the requested `dev-prompt.md`, execute only that scope, write `dev-report.md`, and run:
 
 ```text
 /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify
 ```
+
+## Tooling Preference
+
+Prefer `rtk` for repo reads and searches when it is available. If `rtk` is not available in this shell, silently use the normal shell equivalent such as `sed`, `rg`, `find`, or `git`. Do not stop, complain, or report that `rtk` is unavailable unless the task specifically depends on `rtk`.
 
 Do not treat your own report as approval. Architect reports are reviewed as leads, not proof, and the Architect will verify repo state before accepting the work.

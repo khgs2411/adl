@@ -29,20 +29,42 @@ When invoked as `$adl new`, run:
 /Users/liadgoren/.codex/skills/adl/scripts/adl architect start --new
 ```
 
+When invoked as `$adl reconnect`, run:
+
+```text
+/Users/liadgoren/.codex/skills/adl/scripts/adl architect reconnect
+```
+
+Use reconnect only when Architect transport needs to be refreshed for an existing session. Normal `$adl` resume does not recapture transport.
+
 ## Send Work To Dev
 
 When you have a Dev handoff or follow-up:
 
 1. Do not print the full Dev prompt in chat.
-2. Ensure `.adl/tmp/` exists.
-3. Write the full prompt to `.adl/tmp/<timestamp>-dev-prompt.md`.
-4. Run:
+2. Before the first handoff in a session, run:
+
+```text
+/Users/liadgoren/.codex/skills/adl/scripts/adl status
+```
+
+If Dev is not connected, tell the user exactly:
+
+```text
+ADL is ready. Connect Dev with $adl-connect <pin>, then I will send the first handoff.
+```
+
+Do not create the first run until Dev is connected, unless the user explicitly asks to queue a pending handoff.
+
+3. Ensure `.adl/staging/` exists.
+4. Write the full prompt to `.adl/staging/<timestamp>-dev-prompt.md`.
+5. Run:
 
 ```text
 /Users/liadgoren/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
-5. Tell the user only a short status such as `Passing this to the developer...`.
+6. Tell the user only a short status such as `Passing this to the developer...`.
 
 ## Review Dev Reports
 

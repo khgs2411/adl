@@ -2,7 +2,13 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.2.0"
+VERSION="0.3.2"
+UPDATE=0
+case "${1:-}" in
+  "") ;;
+  --update) UPDATE=1 ;;
+  *) print -r -- "Usage: .install.sh [--update]" >&2; exit 2 ;;
+esac
 SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
 ADL_TARGET="$SKILLS_DIR/adl"
 CONNECT_TARGET="$SKILLS_DIR/adl-connect"
@@ -35,6 +41,12 @@ if [[ -d "$ADL_TARGET" && ! -f "$MARKER" ]]; then
   "$CP" -R "$ADL_TARGET" "$backup"
   print -r -- "Backed up existing adl skill to: $backup"
   print -r -- "Rollback: \"$RM\" -rf '$ADL_TARGET' && \"$CP\" -R '$backup' '$ADL_TARGET'"
+fi
+
+if [[ -f "$MARKER" && "$UPDATE" != "1" ]]; then
+  print -r -- "ADL framework already installed at $ADL_TARGET"
+  print -r -- "Run ./.install.sh --update to replace it with version $VERSION."
+  exit 0
 fi
 
 "$RM" -rf "$ADL_TARGET" "$CONNECT_TARGET"

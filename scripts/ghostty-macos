@@ -18,6 +18,12 @@ escape_applescript_text() {
 capture_dry_run() {
   local role="$1"
   local role_upper="${role:u}"
+  if [[ -n "${ADL_GHOSTTY_DRY_RUN_TERMINAL_ID:-}" ]]; then
+    print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"
+    print -r -- "ADL_${role_upper}_TERMINAL_ID='$ADL_GHOSTTY_DRY_RUN_TERMINAL_ID'"
+    print -r -- "ADL_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"
+    return
+  fi
   print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"
   print -r -- "ADL_${role_upper}_TERMINAL_ID='dry-run-${role}-terminal'"
   print -r -- "ADL_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"

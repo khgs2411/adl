@@ -2,13 +2,15 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.2.0"
+VERSION="0.3.2"
 SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
+SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
+GLOBAL_MARKER="$SKILLS_DIR/adl/.adl-framework"
 ADL_DIR=".adl"
 SESSIONS_DIR="$ADL_DIR/sessions"
-TMP_DIR="$ADL_DIR/tmp"
+STAGING_DIR="$ADL_DIR/staging"
 ACTIVE_FILE="$ADL_DIR/active-session"
 DATE="/bin/date"
 CAT="/bin/cat"
@@ -17,10 +19,19 @@ MKDIR="/bin/mkdir"
 MV="/bin/mv"
 RM="/bin/rm"
 AWK="/usr/bin/awk"
+LOG_FILE="$ADL_DIR/adl.log"
 
-die() { print -r -- "$*" >&2; exit 1; }
-die_state() { print -r -- "$*" >&2; exit 2; }
-die_transport() { print -r -- "$*" >&2; exit 3; }
+log_enabled() { [[ "${ADL_LOG:-1}" != "0" ]]; }
+
+log_event() {
+  log_enabled || return 0
+  "$MKDIR" -p "$ADL_DIR" 2>/dev/null || return 0
+  print -r -- "ts=$(now_ts) version=$VERSION cwd=$PWD event=$*" >> "$LOG_FILE" 2>/dev/null || return 0
+}
+
+die() { log_event "error code=1 message=${(qqq)*}"; print -r -- "$*" >&2; exit 1; }
+die_state() { log_event "error code=2 message=${(qqq)*}"; print -r -- "$*" >&2; exit 2; }
+die_transport() { log_event "error code=3 message=${(qqq)*}"; print -r -- "$*" >&2; exit 3; }
 
 now_ts() { "$DATE" "+%Y-%m-%dT%H:%M:%S%z"; }
 pin() { printf "%06d\n" "$((100000 + RANDOM % 900000))"; }
@@ -35,7 +46,7 @@ safe_write() {
 
 allowed_key() {
   case "$1" in
-    ADL_SESSION_ID|ADL_PIN|ADL_STATUS|ADL_ACTIVE_RUN|ADL_ARCHITECT_ADAPTER|ADL_ARCHITECT_TERMINAL_ID|ADL_DEV_ADAPTER|ADL_DEV_TERMINAL_ID|ADL_DEV_GENERATION|ADL_VERSION|ADL_RUN_ID|ADL_RUN_STATUS|ADL_PROMPT_PATH|ADL_REPORT_PATH|ADL_CREATED_AT|ADL_SENT_AT|ADL_REPORTED_AT|ADL_SUPERSEDED_BY)
+    ADL_SESSION_ID|ADL_PIN|ADL_STATUS|ADL_ACTIVE_RUN|ADL_ARCHITECT_ADAPTER|ADL_ARCHITECT_TERMINAL_ID|ADL_DEV_ADAPTER|ADL_DEV_TERMINAL_ID|ADL_DEV_GENERATION|ADL_VERSION|ADL_SOURCE|ADL_RUN_ID|ADL_RUN_STATUS|ADL_PROMPT_PATH|ADL_REPORT_PATH|ADL_CREATED_AT|ADL_SENT_AT|ADL_REPORTED_AT|ADL_SUPERSEDED_BY)
       return 0
       ;;
     *)
@@ -149,7 +160,7 @@ capture_value() {
 }
 
 create_session() {
-  "$MKDIR" -p "$SESSIONS_DIR" "$TMP_DIR"
+  "$MKDIR" -p "$SESSIONS_DIR" "$STAGING_DIR"
   local p sid sdir capture arch_term
   p="$(pin)"
   sid="$(session_id_for_pin "$p")"
@@ -170,29 +181,52 @@ create_session() {
     print -r -- "ADL_VERSION='$VERSION'"
   } | safe_write "$sdir/session.env"
   print -r -- "$sid" | safe_write "$ACTIVE_FILE"
+  log_event "architect.start mode=new session=$sid pin=$p architect_terminal=$arch_term"
   print -r -- "ADL session ready."
   print -r -- "Pin: $p"
   print -r -- "In Dev Codex, invoke: \$adl-connect $p"
 }
 
 start_architect() {
-  local sid sf p
+  local sid sf p arch_term
   if [[ "${1:-}" == "--new" ]]; then
     if sid="$(active_session 2>/dev/null)"; then
       sf="$(session_file "$sid")"
-      [[ -f "$sf" ]] && env_set "$sf" ADL_STATUS closed
+      [[ -f "$sf" ]] && env_set "$sf" ADL_STATUS closed && log_event "architect.start closed_previous_session=$sid"
     fi
     create_session
     return
   fi
   "$MKDIR" -p "$ADL_DIR"
   if sid="$(active_session 2>/dev/null)" && [[ -f "$(session_file "$sid")" ]]; then
-    p="$(env_get "$(session_file "$sid")" ADL_PIN)"
+    sf="$(session_file "$sid")"
+    arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
+    p="$(env_get "$sf" ADL_PIN)"
+    log_event "architect.start mode=resume session=$sid pin=$p architect_terminal=${arch_term:-absent}"
     print -r -- "Resumed ADL session."
     print -r -- "Pin: $p"
     return
   fi
   create_session
+}
+
+reconnect_architect() {
+  local sid sf p capture arch_term dev_term
+  sid="$(require_active_session)"
+  sf="$(session_file "$sid")"
+  p="$(env_get "$sf" ADL_PIN)"
+  capture="$(capture_role architect)"
+  arch_term="$(capture_value "$capture" ADL_ARCHITECT_TERMINAL_ID)"
+  dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
+  if [[ -n "$dev_term" && "$arch_term" == "$dev_term" ]]; then
+    log_event "architect.reconnect refused_collision session=$sid pin=$p architect_terminal=$arch_term dev_terminal=$dev_term"
+    die_transport "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun \$adl reconnect."
+  fi
+  env_set "$sf" ADL_ARCHITECT_ADAPTER ghostty-macos
+  env_set "$sf" ADL_ARCHITECT_TERMINAL_ID "$arch_term"
+  log_event "architect.reconnect session=$sid pin=$p architect_terminal=$arch_term dev_terminal=${dev_term:-absent}"
+  print -r -- "Reconnected Architect transport."
+  print -r -- "Pin: $p"
 }
 
 next_run_id() {
@@ -226,7 +260,14 @@ send_dev() {
   [[ "${1:-}" == "--prompt-file" ]] || die "Usage: adl architect send-dev --prompt-file <path>"
   local prompt="${2:-}"
   [[ -f "$prompt" ]] || die "Missing prompt file: $prompt"
-  [[ "$prompt" == .adl/tmp/* ]] || die "Prompt file must be under .adl/tmp/"
+  local legacy_prompt=0
+  if [[ "$prompt" == .adl/staging/* ]]; then
+    legacy_prompt=0
+  elif [[ "$prompt" == .adl/tmp/* ]]; then
+    legacy_prompt=1
+  else
+    die "Prompt file must be under .adl/staging/"
+  fi
   local sid sf active active_env active_status rid rdir dev_term run_status
   sid="$(require_active_session)"
   sf="$(session_file "$sid")"
@@ -254,14 +295,17 @@ send_dev() {
     env_set "$rdir/run.env" ADL_RUN_STATUS sent_to_dev
     env_set "$rdir/run.env" ADL_SENT_AT "$(now_ts)"
     env_set "$sf" ADL_STATUS sent_to_dev
+    log_event "architect.send_dev session=$sid run=$rid status=sent_to_dev dev_terminal=$dev_term"
     print -r -- "Passing this to the developer..."
     print -r -- "Run: $rid"
   else
+    log_event "architect.send_dev session=$sid run=$rid status=pending_dev_connection dev_terminal=absent"
     print -r -- "Dev is not connected."
     print -r -- "Run: $rid"
     print -r -- "Pin: $(env_get "$sf" ADL_PIN)"
   fi
-  [[ -n "$active" ]] && print -r -- "Previous active run superseded: $active"
+  [[ "$legacy_prompt" == "1" ]] && print -r -- "Note: accepted legacy staging path .adl/tmp; use .adl/staging going forward."
+  [[ -n "$active" ]] && log_event "architect.send_dev previous_active_run=$active new_run=$rid" && print -r -- "Previous active run superseded: $active"
   return 0
 }
 
@@ -279,6 +323,8 @@ For each Architect's Request:
 2. Execute only that scope.
 3. Write dev-report.md using the requested template.
 4. Run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify.
+
+Prefer rtk for repo reads and searches when it is available. If rtk is not available in this shell, silently use the normal shell equivalent such as sed, rg, find, or git. Do not stop, complain, or report that rtk is unavailable unless the task specifically depends on rtk.
 
 Do not commit unless explicitly instructed.
 Do not broaden scope.
@@ -316,15 +362,28 @@ connect_dev() {
   env_set "$sf" ADL_DEV_TERMINAL_ID "$dev_term"
   generation="$(env_get "$sf" ADL_DEV_GENERATION || print 0)"
   env_set "$sf" ADL_DEV_GENERATION "$((generation + 1))"
+  log_event "dev.connect session=$found pin=$p replace=${replace:-0} dev_terminal=$dev_term generation=$((generation + 1)) active_run=${active:-absent} active_status=${active_status:-absent}"
+  notify_architect_dev_connected "$found" "$dev_term"
   print -r -- "Connected to ADL session $p."
+  print -r -- "Architect notified: Dev connected and ready."
   print -r -- "Read your persistent developer brief:"
   print -r -- "$SESSIONS_DIR/$found/dev-brief.md"
   [[ -n "$active" ]] && print -r -- "Pending Architect's Request: $SESSIONS_DIR/$found/runs/$active/dev-prompt.md"
   return 0
 }
 
+notify_architect_dev_connected() {
+  local sid="$1" dev_term="$2"
+  local sf arch_term
+  sf="$(session_file "$sid")"
+  arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
+  [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run \$adl reconnect, then retry \$adl-connect with --replace."
+  "$GHOSTTY" send "$arch_term" "Dev Connected:\n\nDev is connected and ready.\n\nSend the first handoff." >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run \$adl reconnect, then retry \$adl-connect with --replace."
+  log_event "dev.connect_notify session=$sid architect_terminal=$arch_term dev_terminal=$dev_term"
+}
+
 notify_dev() {
-  local sid sf active rdir report arch_term run_status
+  local sid sf active rdir report arch_term dev_term run_status
   sid="$(require_active_session)"
   sf="$(session_file "$sid")"
   active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
@@ -339,17 +398,22 @@ notify_dev() {
     print -r -- "# Dev Report\n\nStatus: DONE | BLOCKED | NEEDS_CONTEXT\n\n## Files Changed\n\n## Verification\n\n## Deviations\n\n## Blockers Or Assumptions\n\n## Notes" >&2
     exit 1
   }
+  arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
+  dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
+  [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run \$adl reconnect, then retry notify."
+  [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run \$adl reconnect, then retry notify."
+  "$GHOSTTY" send "$arch_term" "Developer's Report:\n\nRead:\n$report\n\nReview against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running \$adl reconnect."
   env_set "$rdir/run.env" ADL_RUN_STATUS reported
   env_set "$rdir/run.env" ADL_REPORTED_AT "$(now_ts)"
   env_set "$sf" ADL_STATUS reported
-  arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
-  "$GHOSTTY" send "$arch_term" "Developer's Report:\n\nRead:\n$report\n\nReview against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by invoking \$adl."
+  log_event "dev.notify session=$sid run=$active status=reported architect_terminal=$arch_term dev_terminal=$dev_term report=$report"
   print -r -- "Developer's Report sent."
 }
 
 status_cmd() {
   local sid sf active dev_term session_status next_action
   if ! sid="$(active_session 2>/dev/null)"; then
+    log_event "status session=absent"
     print -r -- "No active ADL session."
     return
   fi
@@ -368,6 +432,102 @@ status_cmd() {
   [[ -n "$dev_term" ]] && print -r -- "Dev: connected" || print -r -- "Dev: not connected"
   print -r -- "Active run: $active"
   print -r -- "Next: $next_action"
+  log_event "status session=$sid status=$session_status active_run=${active:-absent} dev_terminal=${dev_term:-absent}"
+}
+
+present_or_absent() {
+  [[ -n "$1" ]] && print -r -- "$1" || print -r -- "absent"
+}
+
+doctor_cmd() {
+  if [[ "${1:-}" == "ghostty" ]]; then
+    shift
+    doctor_ghostty "$@"
+    return
+  fi
+  [[ -z "${1:-}" ]] || die "Usage: adl doctor [ghostty architect|dev]"
+
+  local sid="" sf="" active="" active_env="" marker_version="" marker_source=""
+  local architect_adapter="" architect_terminal="" dev_adapter="" dev_terminal=""
+  local pin_value="" session_status="" run_status=""
+
+  if sid="$(active_session 2>/dev/null)"; then
+    sf="$(session_file "$sid")"
+    if [[ -f "$sf" ]]; then
+      pin_value="$(env_get "$sf" ADL_PIN || true)"
+      session_status="$(env_get "$sf" ADL_STATUS || true)"
+      active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
+      architect_adapter="$(env_get "$sf" ADL_ARCHITECT_ADAPTER || true)"
+      architect_terminal="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
+      dev_adapter="$(env_get "$sf" ADL_DEV_ADAPTER || true)"
+      dev_terminal="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
+      if [[ -n "$active" ]]; then
+        active_env="$SESSIONS_DIR/$sid/runs/$active/run.env"
+        [[ -f "$active_env" ]] && run_status="$(env_get "$active_env" ADL_RUN_STATUS || true)"
+      fi
+    fi
+  fi
+
+  if [[ -f "$GLOBAL_MARKER" ]]; then
+    marker_version="$(env_get "$GLOBAL_MARKER" ADL_VERSION || true)"
+    marker_source="$(env_get "$GLOBAL_MARKER" ADL_SOURCE || true)"
+  fi
+
+  print -r -- "ADL doctor"
+  print -r -- "cli.version: $VERSION"
+  print -r -- "cwd: $PWD"
+  print -r -- "log.enabled: ${ADL_LOG:-1}"
+  print -r -- "log.path: $PWD/$LOG_FILE"
+  [[ -d "$ADL_DIR" ]] && print -r -- "adl.dir: present ($PWD/$ADL_DIR)" || print -r -- "adl.dir: missing ($PWD/$ADL_DIR)"
+  print -r -- "session.id: $(present_or_absent "$sid")"
+  print -r -- "session.pin: $(present_or_absent "$pin_value")"
+  print -r -- "session.status: $(present_or_absent "$session_status")"
+  print -r -- "run.id: $(present_or_absent "$active")"
+  print -r -- "run.status: $(present_or_absent "$run_status")"
+  [[ -n "$architect_adapter" && -n "$architect_terminal" ]] && print -r -- "transport.architect: present ($architect_adapter)" || print -r -- "transport.architect: missing"
+  [[ -n "$dev_adapter" && -n "$dev_terminal" ]] && print -r -- "transport.dev: present ($dev_adapter)" || print -r -- "transport.dev: missing"
+  [[ -n "$architect_terminal" && "$architect_terminal" == "$dev_terminal" ]] && print -r -- "transport.warning: architect and dev terminal ids match; run \$adl reconnect in the Architect pane"
+  [[ -z "$architect_terminal" || ( -n "$dev_terminal" && "$architect_terminal" == "$dev_terminal" ) ]] && print -r -- "next: run \$adl reconnect in Architect pane"
+  if [[ -f "$GLOBAL_MARKER" ]]; then
+    print -r -- "global.marker: present ($GLOBAL_MARKER)"
+    print -r -- "global.version: $(present_or_absent "$marker_version")"
+    print -r -- "global.source: $(present_or_absent "$marker_source")"
+  else
+    print -r -- "global.marker: missing ($GLOBAL_MARKER)"
+    print -r -- "global.version: absent"
+  fi
+  [[ -x "$GHOSTTY" ]] && print -r -- "ghostty.adapter: executable ($GHOSTTY)" || print -r -- "ghostty.adapter: not executable ($GHOSTTY)"
+  log_event "doctor session=${sid:-absent} status=${session_status:-absent} run=${active:-absent} run_status=${run_status:-absent}"
+}
+
+doctor_ghostty() {
+  local role="${1:-}" capture code
+  [[ "$role" == "architect" || "$role" == "dev" ]] || die "Usage: adl doctor ghostty architect|dev"
+
+  set +e
+  capture="$("$GHOSTTY" capture-focused "$role" 2>&1)"
+  code="$?"
+  set -e
+
+  print -r -- "ADL doctor ghostty"
+  print -r -- "role: $role"
+  print -r -- "adapter.path: $GHOSTTY"
+  [[ -x "$GHOSTTY" ]] && print -r -- "adapter.executable: yes" || print -r -- "adapter.executable: no"
+  print -r -- "dry_run: ${ADL_GHOSTTY_DRY_RUN:-0}"
+  if [[ "$code" == "0" ]]; then
+    print -r -- "capture: ok"
+    print -r -- "$capture"
+    log_event "doctor.ghostty role=$role capture=ok"
+    return
+  fi
+
+  print -r -- "capture: failed"
+  print -r -- "exit_code: $code"
+  print -r -- "error: $capture"
+  print -r -- "next: If running from Codex, rerun the same command with escalation/outside-sandbox access so /usr/bin/osascript can control Ghostty."
+  print -r -- "next: If escalation still fails, grant macOS Automation permission for osascript to control Ghostty, then retry."
+  log_event "doctor.ghostty role=$role capture=failed exit_code=$code"
+  exit 3
 }
 
 case "${1:-}" in
@@ -375,8 +535,9 @@ case "${1:-}" in
     shift
     case "${1:-}" in
       start) shift; start_architect "${1:-}" ;;
+      reconnect) shift; reconnect_architect ;;
       send-dev) shift; send_dev "$@" ;;
-      *) die "Usage: adl architect start [--new] | send-dev --prompt-file <path>" ;;
+      *) die "Usage: adl architect start [--new] | reconnect | send-dev --prompt-file <path>" ;;
     esac
     ;;
   dev)
@@ -384,13 +545,18 @@ case "${1:-}" in
     case "${1:-}" in
       connect) shift; connect_dev "$@" ;;
       notify) notify_dev ;;
-      *) die "Usage: adl dev connect <pin> [--replace] | notify" ;;
+      status) status_cmd ;;
+      *) die "Usage: adl dev connect <pin> [--replace] | notify | status" ;;
     esac
     ;;
   status)
     status_cmd
     ;;
+  doctor)
+    shift
+    doctor_cmd "$@"
+    ;;
   *)
-    die "Usage: adl architect ... | dev ... | status"
+    die "Usage: adl architect ... | dev ... | status | doctor [ghostty architect|dev]"
     ;;
 esac
