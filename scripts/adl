@@ -2,7 +2,7 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.4.1"
+VERSION="0.4.3"
 SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
@@ -36,6 +36,15 @@ die_transport() { log_event "error code=3 message=${(qqq)*}"; print -r -- "$*" >
 now_ts() { "$DATE" "+%Y-%m-%dT%H:%M:%S%z"; }
 pin() { printf "%06d\n" "$((100000 + RANDOM % 900000))"; }
 session_id_for_pin() { print -r -- "$("$DATE" "+%Y-%m-%d-%H%M%S")-$1"; }
+
+skill_invocation() {
+  local skill="$1"
+  if [[ "$SCRIPT_PATH" == */.claude/skills/* ]]; then
+    print -r -- "/$skill"
+  else
+    print -r -- "\$$skill"
+  fi
+}
 
 safe_write() {
   local path="$1"
@@ -141,7 +150,7 @@ session_file() {
 
 require_active_session() {
   local sid
-  sid="$(active_session)" || die "No active ADL session. Invoke \$adl first."
+  sid="$(active_session)" || die "No active ADL session. Invoke $(skill_invocation adl) first."
   [[ -f "$(session_file "$sid")" ]] || die_state "Active ADL session is missing session.env: $sid"
   print -r -- "$sid"
 }
@@ -184,7 +193,7 @@ create_session() {
   log_event "architect.start mode=new session=$sid pin=$p architect_terminal=$arch_term"
   print -r -- "ADL session ready."
   print -r -- "Pin: $p"
-  print -r -- "In Dev Codex, invoke: \$adl-connect $p"
+  print -r -- "In Dev, invoke: $(skill_invocation adl-connect) $p"
 }
 
 start_architect() {
@@ -220,7 +229,7 @@ reconnect_architect() {
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
   if [[ -n "$dev_term" && "$arch_term" == "$dev_term" ]]; then
     log_event "architect.reconnect refused_collision session=$sid pin=$p architect_terminal=$arch_term dev_terminal=$dev_term"
-    die_transport "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun \$adl reconnect."
+    die_transport "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun $(skill_invocation adl) reconnect."
   fi
   env_set "$sf" ADL_ARCHITECT_ADAPTER ghostty-macos
   env_set "$sf" ADL_ARCHITECT_TERMINAL_ID "$arch_term"
@@ -351,7 +360,7 @@ connect_dev() {
   if [[ -n "$existing" && "$replace" != "--replace" ]]; then
     case "$active_status" in
       pending_dev_connection|sent_to_dev)
-        die "Dev already connected for active run $active. Run: \$adl-connect $p --replace"
+        die "Dev already connected for active run $active. Run: $(skill_invocation adl-connect) $p --replace"
         ;;
     esac
   fi
@@ -377,8 +386,8 @@ notify_architect_dev_connected() {
   local sf arch_term
   sf="$(session_file "$sid")"
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
-  [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run \$adl reconnect, then retry \$adl-connect with --replace."
-  "$GHOSTTY" send "$arch_term" "Dev connected and ready. Send the first handoff." >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run \$adl reconnect, then retry \$adl-connect with --replace."
+  [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
+  "$GHOSTTY" send "$arch_term" "Dev connected and ready. Send the first handoff." >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
   log_event "dev.connect_notify session=$sid architect_terminal=$arch_term dev_terminal=$dev_term"
 }
 
@@ -400,9 +409,9 @@ notify_dev() {
   }
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
-  [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run \$adl reconnect, then retry notify."
-  [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run \$adl reconnect, then retry notify."
-  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running \$adl reconnect."
+  [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
+  [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
+  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running $(skill_invocation adl) reconnect."
   env_set "$rdir/run.env" ADL_RUN_STATUS reported
   env_set "$rdir/run.env" ADL_REPORTED_AT "$(now_ts)"
   env_set "$sf" ADL_STATUS reported
@@ -423,7 +432,7 @@ status_cmd() {
   active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
   next_action="Start or send a Dev handoff."
-  [[ -z "$dev_term" ]] && next_action="Connect Dev with \$adl-connect $(env_get "$sf" ADL_PIN)."
+  [[ -z "$dev_term" ]] && next_action="Connect Dev with $(skill_invocation adl-connect) $(env_get "$sf" ADL_PIN)."
   [[ -n "$active" ]] && next_action="Review active run state or wait for Dev report."
   print -r -- "ADL session: $sid"
   print -r -- "Root: $PWD"

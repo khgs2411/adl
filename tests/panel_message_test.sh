@@ -53,6 +53,27 @@ export ADL_MESSAGE_LOG="$MESSAGE_LOG"
 
 start="$("$ROOT/scripts/adl" architect start)"
 pin="$(print -r -- "$start" | awk '/^Pin: / { print $2 }')"
+adl_status="$("$ROOT/scripts/adl" status)"
+assert_contains "$adl_status" "Connect Dev with \$adl-connect $pin." "source/codex status should use dollar skill invocation"
+
+CLAUDE_ADL="$TMP/.claude/skills/adl/scripts/adl"
+mkdir -p "$CLAUDE_ADL:h"
+/bin/cp "$ROOT/scripts/adl" "$CLAUDE_ADL"
+chmod +x "$CLAUDE_ADL"
+claude_status="$("$CLAUDE_ADL" status)"
+assert_contains "$claude_status" "Connect Dev with /adl-connect $pin." "claude-installed status should use slash skill invocation"
+
+NO_SESSION_DIR="$TMP/no-session"
+mkdir -p "$NO_SESSION_DIR/.claude/skills/adl/scripts"
+/bin/cp "$ROOT/scripts/adl" "$NO_SESSION_DIR/.claude/skills/adl/scripts/adl"
+chmod +x "$NO_SESSION_DIR/.claude/skills/adl/scripts/adl"
+set +e
+claude_notify_error="$(cd "$NO_SESSION_DIR" && "$NO_SESSION_DIR/.claude/skills/adl/scripts/adl" dev notify 2>&1)"
+claude_notify_code="$?"
+set -e
+assert_eq "1" "$claude_notify_code" "claude dev notify without session should fail"
+assert_contains "$claude_notify_error" "No active ADL session. Invoke /adl first." "claude no-session error should use slash skill invocation"
+assert_not_contains "$claude_notify_error" "Invoke \$adl first" "claude no-session error should not use Codex dollar skill invocation"
 
 connect="$("$ROOT/scripts/adl" dev connect "$pin")"
 assert_contains "$connect" "Architect notified: Dev connected and ready." "connect should send ready panel message"

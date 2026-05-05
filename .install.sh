@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.4.1"
+VERSION="0.4.3"
 UPDATE=0
 TARGET_RUNTIME="all"
 BUMP_MODE="patch"

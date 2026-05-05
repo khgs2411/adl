@@ -1,6 +1,6 @@
 ---
 name: adl-connect
-description: Invoke as adl-connect for the Developer side of the Architect-Developer Loop. Use with a pin from the Architect to connect or reconnect this Claude Code session as Dev.
+description: Invoke as /adl-connect for the Developer side of the Architect-Developer Loop. Use with a pin from the Architect to connect or reconnect this Claude Code session as Dev.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -14,13 +14,13 @@ The CLI is authoritative:
 /Users/liadgoren/.claude/skills/adl/scripts/adl
 ```
 
-When invoked as `$adl-connect <pin>`, run:
+When invoked as `/adl-connect <pin>`, run:
 
 ```text
 /Users/liadgoren/.claude/skills/adl/scripts/adl dev connect <pin>
 ```
 
-When invoked as `$adl-connect <pin> --replace`, run:
+When invoked as `/adl-connect <pin> --replace`, run:
 
 ```text
 /Users/liadgoren/.claude/skills/adl/scripts/adl dev connect <pin> --replace

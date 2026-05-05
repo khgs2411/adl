@@ -22,19 +22,19 @@ The Architect owns scope, review, and approval. Treat Developer reports as leads
 
 ## Start Or Resume
 
-When invoked as `$adl`, run:
+When invoked as `/adl`, run:
 
 ```text
 /Users/liadgoren/.claude/skills/adl/scripts/adl architect start
 ```
 
-When invoked as `$adl new`, run:
+When invoked as `/adl new`, run:
 
 ```text
 /Users/liadgoren/.claude/skills/adl/scripts/adl architect start --new
 ```
 
-When invoked as `$adl reconnect`, run:
+When invoked as `/adl reconnect`, run:
 
 ```text
 /Users/liadgoren/.claude/skills/adl/scripts/adl architect reconnect
@@ -67,7 +67,7 @@ Every Dev prompt must include:
 If Dev is not connected, tell the user exactly:
 
 ```text
-ADL is ready. Connect Dev with $adl-connect <pin>, then I will send the first handoff.
+ADL is ready. Connect Dev with /adl-connect <pin>, then I will send the first handoff.
 ```
 
 Do not create the first run until Dev is connected, unless the user explicitly asks to queue a pending handoff.
