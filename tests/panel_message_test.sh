@@ -11,7 +11,7 @@ cd "$TMP"
 FAKE_ADAPTER_DIR="$TMP/fake-adapter"
 MESSAGE_LOG="$TMP/messages.log"
 mkdir -p "$FAKE_ADAPTER_DIR"
-cat > "$FAKE_ADAPTER_DIR/ghostty-macos" <<'ADAPTER'
+/bin/cat > "$FAKE_ADAPTER_DIR/ghostty-macos" <<'ADAPTER'
 #!/bin/zsh
 set -euo pipefail
 
@@ -51,6 +51,47 @@ chmod +x "$FAKE_ADAPTER_DIR/ghostty-macos"
 export ADL_SCRIPT_ROOT="$FAKE_ADAPTER_DIR"
 export ADL_MESSAGE_LOG="$MESSAGE_LOG"
 
+write_dev_prompt() {
+  local path="$1"
+  /bin/cat > "$path" <<'PROMPT'
+Goal: Panel message test
+Slice: Send one request
+Approved context: Test fixture only.
+Acceptance criteria:
+- Panel message stays one line.
+In scope: Message text.
+Out of scope: Real terminal automation.
+Expected evidence: Message log.
+PROMPT
+}
+
+write_dev_report() {
+  local path="$1"
+  /bin/cat > "$path" <<'REPORT'
+# Dev Report
+
+Status: DONE
+Goal: Panel message test
+Slice: Send one request
+
+## Acceptance Results
+- Panel message stays one line. PASS - message log checked.
+
+## Files Changed
+None
+
+## Verification
+- Command: message log
+- Result: PASS
+
+## Deviations
+None
+
+## Residual Risks
+None
+REPORT
+}
+
 start="$("$ROOT/scripts/adl" architect start)"
 pin="$(print -r -- "$start" | awk '/^Pin: / { print $2 }')"
 adl_status="$("$ROOT/scripts/adl" status)"
@@ -79,20 +120,36 @@ connect="$("$ROOT/scripts/adl" dev connect "$pin")"
 assert_contains "$connect" "Architect notified: Dev connected and ready." "connect should send ready panel message"
 
 mkdir -p .adl/staging
-print -r -- "Panel message task" > .adl/staging/prompt.md
+write_dev_prompt .adl/staging/prompt.md
 send="$("$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt.md)"
 assert_contains "$send" "Passing this to the developer" "send-dev should send architect request panel message"
 
 session_id="$(cat .adl/active-session)"
-cat > ".adl/sessions/$session_id/runs/001/dev-report.md" <<'REPORT'
-# Dev Report
-
-Status: DONE
-REPORT
+write_dev_report ".adl/sessions/$session_id/runs/001/dev-report.md"
 notify="$("$ROOT/scripts/adl" dev notify)"
 assert_contains "$notify" "Developer's Report sent" "notify should send report panel message"
 
 messages="$(cat "$MESSAGE_LOG")"
 assert_contains "$messages" "Dev connected and ready. Send the first handoff." "ready message should be one line"
 assert_contains "$messages" "Architect's Request: read and execute .adl/sessions/" "request message should be one line"
+assert_contains "$messages" "$ROOT/scripts/adl dev notify" "request message should use active CLI path"
 assert_contains "$messages" "Developer's Report: read .adl/sessions/" "report message should be one line"
+assert_contains "$messages" "goal, approved context, acceptance criteria, and repo state" "report message should nudge goal and acceptance review"
+
+CLAUDE_PANEL="$TMP/.claude-panel"
+mkdir -p "$CLAUDE_PANEL/.claude/skills/adl/scripts"
+/bin/cp "$ROOT/scripts/adl" "$CLAUDE_PANEL/.claude/skills/adl/scripts/adl"
+chmod +x "$CLAUDE_PANEL/.claude/skills/adl/scripts/adl"
+(
+  cd "$CLAUDE_PANEL"
+  export ADL_SCRIPT_ROOT="$FAKE_ADAPTER_DIR"
+  export ADL_MESSAGE_LOG="$MESSAGE_LOG"
+  claude_start="$("$CLAUDE_PANEL/.claude/skills/adl/scripts/adl" architect start)"
+  claude_pin="$(print -r -- "$claude_start" | awk '/^Pin: / { print $2 }')"
+  "$CLAUDE_PANEL/.claude/skills/adl/scripts/adl" dev connect "$claude_pin" >/dev/null
+  mkdir -p .adl/staging
+  write_dev_prompt .adl/staging/prompt.md
+  "$CLAUDE_PANEL/.claude/skills/adl/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt.md >/dev/null
+)
+messages="$(cat "$MESSAGE_LOG")"
+assert_contains "$messages" "${CLAUDE_PANEL:A}/.claude/skills/adl/scripts/adl dev notify" "claude request message should use claude CLI path"

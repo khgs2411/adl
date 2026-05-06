@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.4.3"
+VERSION="0.4.5"
 UPDATE=0
 TARGET_RUNTIME="all"
 BUMP_MODE="patch"
@@ -50,6 +50,7 @@ require_file() {
 }
 
 require_file "$ROOT/scripts/adl"
+require_file "$ROOT/scripts/adl-clear"
 require_file "$ROOT/scripts/ghostty-macos"
 
 bumped_version() {
@@ -112,11 +113,13 @@ install_runtime() {
   fi
 
   local adl_target="$skills_dir/adl"
+  local clear_target="$skills_dir/adl-clear"
   local connect_target="$skills_dir/adl-connect"
   local backup_root="$skills_dir/.adl-project-backups"
   local marker="$adl_target/.adl-framework"
 
   require_file "$source_skills_dir/adl/SKILL.md"
+  require_file "$source_skills_dir/adl-clear/SKILL.md"
   require_file "$source_skills_dir/adl-connect/SKILL.md"
 
   "$MKDIR" -p "$skills_dir"
@@ -137,14 +140,18 @@ install_runtime() {
     return 0
   fi
 
-  "$RM" -rf "$adl_target" "$connect_target"
+  "$RM" -rf "$adl_target" "$clear_target" "$connect_target"
   "$MKDIR" -p "$adl_target/scripts" "$connect_target"
+  "$MKDIR" -p "$clear_target/scripts"
 
   "$CP" "$source_skills_dir/adl/SKILL.md" "$adl_target/SKILL.md"
+  "$CP" "$source_skills_dir/adl-clear/SKILL.md" "$clear_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-connect/SKILL.md" "$connect_target/SKILL.md"
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
+  "$CP" "$ROOT/scripts/adl-clear" "$clear_target/scripts/adl-clear"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
   "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"
+  "$CHMOD" +x "$clear_target/scripts/adl-clear"
 
   {
     print -r -- "ADL_VERSION='$VERSION'"

@@ -2,7 +2,7 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.4.3"
+VERSION="0.4.5"
 SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
@@ -55,7 +55,7 @@ safe_write() {
 
 allowed_key() {
   case "$1" in
-    ADL_SESSION_ID|ADL_PIN|ADL_STATUS|ADL_ACTIVE_RUN|ADL_ARCHITECT_ADAPTER|ADL_ARCHITECT_TERMINAL_ID|ADL_DEV_ADAPTER|ADL_DEV_TERMINAL_ID|ADL_DEV_GENERATION|ADL_VERSION|ADL_SOURCE|ADL_RUN_ID|ADL_RUN_STATUS|ADL_PROMPT_PATH|ADL_REPORT_PATH|ADL_CREATED_AT|ADL_SENT_AT|ADL_REPORTED_AT|ADL_SUPERSEDED_BY)
+    ADL_SESSION_ID|ADL_PIN|ADL_STATUS|ADL_ACTIVE_RUN|ADL_ARCHITECT_ADAPTER|ADL_ARCHITECT_TERMINAL_ID|ADL_DEV_ADAPTER|ADL_DEV_TERMINAL_ID|ADL_DEV_GENERATION|ADL_VERSION|ADL_SOURCE|ADL_RUN_ID|ADL_RUN_STATUS|ADL_PROMPT_PATH|ADL_REPORT_PATH|ADL_CREATED_AT|ADL_SENT_AT|ADL_REPORTED_AT|ADL_REVIEWED_AT|ADL_REVIEW_VERDICT|ADL_REVIEW_PATH|ADL_SUPERSEDED_BY)
       return 0
       ;;
     *)
@@ -71,6 +71,9 @@ validate_value() {
     ADL_PROMPT_PATH|ADL_REPORT_PATH)
       [[ "$value" == .adl/* ]]
       ;;
+    ADL_REVIEW_PATH)
+      [[ -z "$value" || "$value" == .adl/* ]]
+      ;;
     ADL_SESSION_ID)
       [[ "$value" == [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9] ]]
       ;;
@@ -79,7 +82,7 @@ validate_value() {
       ;;
     ADL_STATUS|ADL_RUN_STATUS)
       case "$value" in
-        waiting_for_dev|pending_dev_connection|sent_to_dev|reported|superseded|closed)
+        waiting_for_dev|pending_dev_connection|sent_to_dev|reported|accepted|accepted_with_notes|passed_back|blocked|superseded|closed)
           return 0
           ;;
         *)
@@ -91,6 +94,70 @@ validate_value() {
       [[ -z "$value" || "$value" == [A-Za-z0-9._:/+-]## ]]
       ;;
   esac
+}
+
+cli_path() {
+  print -r -- "$SCRIPT_PATH"
+}
+
+has_required_section() {
+  local file="$1" label="$2"
+  "$AWK" -v label="$label" '
+    BEGIN { found=0 }
+    $0 ~ "^" label ":[[:space:]]*" { found=1 }
+    $0 ~ "^##[[:space:]]+" label "[[:space:]]*$" { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$file"
+}
+
+validate_dev_prompt() {
+  local prompt="$1" missing=()
+  local section
+  for section in "Goal" "Slice" "Approved context" "Acceptance criteria" "In scope" "Out of scope" "Expected evidence"; do
+    has_required_section "$prompt" "$section" || missing+=("$section")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    print -r -- "Invalid Dev prompt. Missing required section(s): ${(j:, :)missing}" >&2
+    print -r -- "Required: Goal, Slice, Approved context, Acceptance criteria, In scope, Out of scope, Expected evidence." >&2
+    exit 1
+  fi
+}
+
+print_dev_report_template() {
+  print -r -- "# Dev Report"
+  print -r -- ""
+  print -r -- "Status: DONE | BLOCKED | NEEDS_CONTEXT"
+  print -r -- "Goal:"
+  print -r -- "Slice:"
+  print -r -- ""
+  print -r -- "## Acceptance Results"
+  print -r -- "- [criterion] PASS | FAIL | NOT VERIFIED - evidence or reason"
+  print -r -- ""
+  print -r -- "## Files Changed"
+  print -r -- ""
+  print -r -- "## Verification"
+  print -r -- "- Command:"
+  print -r -- "- Result:"
+  print -r -- ""
+  print -r -- "## Deviations"
+  print -r -- ""
+  print -r -- "## Residual Risks"
+}
+
+validate_dev_report() {
+  local report="$1" missing=()
+  local section
+  has_required_section "$report" "Status" || missing+=("Status")
+  has_required_section "$report" "Goal" || missing+=("Goal")
+  has_required_section "$report" "Slice" || missing+=("Slice")
+  for section in "Acceptance Results" "Files Changed" "Verification" "Deviations" "Residual Risks"; do
+    has_required_section "$report" "$section" || missing+=("$section")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    print -r -- "Invalid Dev report. Missing required section(s): ${(j:, :)missing}" >&2
+    print_dev_report_template >&2
+    exit 1
+  fi
 }
 
 validate_env_file() {
@@ -261,6 +328,9 @@ write_run_env() {
     print -r -- "ADL_CREATED_AT='$(now_ts)'"
     print -r -- "ADL_SENT_AT=''"
     print -r -- "ADL_REPORTED_AT=''"
+    print -r -- "ADL_REVIEWED_AT=''"
+    print -r -- "ADL_REVIEW_VERDICT=''"
+    print -r -- "ADL_REVIEW_PATH=''"
     print -r -- "ADL_SUPERSEDED_BY=''"
   } | safe_write "$rdir/run.env"
 }
@@ -277,6 +347,7 @@ send_dev() {
   else
     die "Prompt file must be under .adl/staging/"
   fi
+  validate_dev_prompt "$prompt"
   local sid sf active active_env active_status rid rdir dev_term run_status
   sid="$(require_active_session)"
   sf="$(session_file "$sid")"
@@ -289,6 +360,12 @@ send_dev() {
     fi
   fi
   rid="$(next_run_id "$sid")"
+  if [[ -n "$active" && -f "$active_env" ]]; then
+    active_status="$(env_get "$active_env" ADL_RUN_STATUS || true)"
+    if [[ "$active_status" == "superseded" ]]; then
+      env_set "$active_env" ADL_SUPERSEDED_BY "$rid"
+    fi
+  fi
   rdir="$SESSIONS_DIR/$sid/runs/$rid"
   "$MKDIR" -p "$rdir"
   "$CP" "$prompt" "$rdir/dev-prompt.md.tmp.$$"
@@ -300,7 +377,7 @@ send_dev() {
   env_set "$sf" ADL_ACTIVE_RUN "$rid"
   env_set "$sf" ADL_STATUS "$run_status"
   if [[ -n "$dev_term" ]]; then
-    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md, then run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry."
+    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md using the acceptance template, then run $(cli_path) dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry. The prompt was copied to $rdir/dev-prompt.md."
     env_set "$rdir/run.env" ADL_RUN_STATUS sent_to_dev
     env_set "$rdir/run.env" ADL_SENT_AT "$(now_ts)"
     env_set "$sf" ADL_STATUS sent_to_dev
@@ -331,13 +408,39 @@ For each Architect's Request:
 1. Read the requested dev-prompt.md.
 2. Execute only that scope.
 3. Write dev-report.md using the requested template.
-4. Run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify.
+4. Run __ADL_CLI_PATH__ dev notify.
 
 Prefer rtk for repo reads and searches when it is available. If rtk is not available in this shell, silently use the normal shell equivalent such as sed, rg, find, or git. Do not stop, complain, or report that rtk is unavailable unless the task specifically depends on rtk.
 
 Do not commit unless explicitly instructed.
 Do not broaden scope.
+
+Work autonomously inside the handoff boundaries. Report NEEDS_CONTEXT only for missing required context, destructive actions, credentials, major structural changes, or scope conflicts.
+
+Minimum dev-report.md template:
+
+# Dev Report
+
+Status: DONE | BLOCKED | NEEDS_CONTEXT
+Goal:
+Slice:
+
+## Acceptance Results
+- [criterion] PASS | FAIL | NOT VERIFIED - evidence or reason
+
+## Files Changed
+
+## Verification
+- Command:
+- Result:
+
+## Deviations
+
+## Residual Risks
 BRIEF
+  local tmp="$brief.tmp.$$"
+  "$AWK" -v cli="$(cli_path)" '{ gsub("__ADL_CLI_PATH__", cli); print }' "$brief" > "$tmp"
+  "$MV" "$tmp" "$brief"
 }
 
 connect_dev() {
@@ -377,17 +480,33 @@ connect_dev() {
   print -r -- "Architect notified: Dev connected and ready."
   print -r -- "Read your persistent developer brief:"
   print -r -- "$SESSIONS_DIR/$found/dev-brief.md"
-  [[ -n "$active" ]] && print -r -- "Pending Architect's Request: $SESSIONS_DIR/$found/runs/$active/dev-prompt.md"
+  case "$active_status" in
+    pending_dev_connection|sent_to_dev)
+      [[ -n "$active" ]] && print -r -- "Pending Architect's Request: $SESSIONS_DIR/$found/runs/$active/dev-prompt.md"
+      ;;
+  esac
   return 0
 }
 
 notify_architect_dev_connected() {
   local sid="$1" dev_term="$2"
-  local sf arch_term
+  local sf arch_term active active_status active_env message
   sf="$(session_file "$sid")"
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
   [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
-  "$GHOSTTY" send "$arch_term" "Dev connected and ready. Send the first handoff." >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
+  active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
+  active_status=""
+  if [[ -n "$active" ]]; then
+    active_env="$SESSIONS_DIR/$sid/runs/$active/run.env"
+    [[ -f "$active_env" ]] && active_status="$(env_get "$active_env" ADL_RUN_STATUS || true)"
+  fi
+  message="Dev connected and ready. Send the first handoff."
+  case "$active_status" in
+    pending_dev_connection|sent_to_dev)
+      message="Dev connected and ready. Pending run $active exists; Dev should execute the pending prompt."
+      ;;
+  esac
+  "$GHOSTTY" send "$arch_term" "$message" >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
   log_event "dev.connect_notify session=$sid architect_terminal=$arch_term dev_terminal=$dev_term"
 }
 
@@ -404,14 +523,15 @@ notify_dev() {
   [[ -f "$report" ]] || {
     print -r -- "Cannot notify Architect yet." >&2
     print -r -- "Missing: $report" >&2
-    print -r -- "# Dev Report\n\nStatus: DONE | BLOCKED | NEEDS_CONTEXT\n\n## Files Changed\n\n## Verification\n\n## Deviations\n\n## Blockers Or Assumptions\n\n## Notes" >&2
+    print_dev_report_template >&2
     exit 1
   }
+  validate_dev_report "$report"
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
   [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
   [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
-  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running $(skill_invocation adl) reconnect."
+  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against the goal, approved context, acceptance criteria, and repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running $(skill_invocation adl) reconnect."
   env_set "$rdir/run.env" ADL_RUN_STATUS reported
   env_set "$rdir/run.env" ADL_REPORTED_AT "$(now_ts)"
   env_set "$sf" ADL_STATUS reported
@@ -419,8 +539,55 @@ notify_dev() {
   print -r -- "Developer's Report sent."
 }
 
+review_run() {
+  local verdict="" review_file="" sid sf active rdir normalized
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --verdict)
+        verdict="${2:-}"
+        shift 2
+        ;;
+      --review-file)
+        review_file="${2:-}"
+        shift 2
+        ;;
+      *)
+        die "Usage: adl architect review --verdict accepted|accepted-with-notes|passed-back|blocked --review-file <path>"
+        ;;
+    esac
+  done
+  [[ -n "$verdict" && -n "$review_file" ]] || die "Usage: adl architect review --verdict accepted|accepted-with-notes|passed-back|blocked --review-file <path>"
+  [[ -f "$review_file" ]] || die "Missing review file: $review_file"
+  [[ "$review_file" == .adl/staging/* || "$review_file" == .adl/tmp/* ]] || die "Review file must be under .adl/staging/"
+  case "$verdict" in
+    accepted) normalized="accepted" ;;
+    accepted-with-notes|accepted_with_notes) normalized="accepted_with_notes" ;;
+    passed-back|passed_back) normalized="passed_back" ;;
+    blocked) normalized="blocked" ;;
+    *) die "Unknown review verdict: $verdict" ;;
+  esac
+  sid="$(require_active_session)"
+  sf="$(session_file "$sid")"
+  active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
+  [[ -n "$active" ]] || die "No active run to review."
+  rdir="$SESSIONS_DIR/$sid/runs/$active"
+  [[ -f "$rdir/run.env" ]] || die_state "Active run missing run.env: $active"
+  "$CP" "$review_file" "$rdir/architect-review.md.tmp.$$"
+  "$MV" "$rdir/architect-review.md.tmp.$$" "$rdir/architect-review.md"
+  "$RM" -f "$review_file"
+  env_set "$rdir/run.env" ADL_RUN_STATUS "$normalized"
+  env_set "$rdir/run.env" ADL_REVIEW_VERDICT "$normalized"
+  env_set "$rdir/run.env" ADL_REVIEW_PATH "$rdir/architect-review.md"
+  env_set "$rdir/run.env" ADL_REVIEWED_AT "$(now_ts)"
+  env_set "$sf" ADL_STATUS "$normalized"
+  log_event "architect.review session=$sid run=$active verdict=$normalized review=$rdir/architect-review.md"
+  print -r -- "Architect review recorded."
+  print -r -- "Run: $active"
+  print -r -- "Verdict: $normalized"
+}
+
 status_cmd() {
-  local sid sf active dev_term session_status next_action
+  local sid sf active dev_term session_status next_action active_env run_status
   if ! sid="$(active_session 2>/dev/null)"; then
     log_event "status session=absent"
     print -r -- "No active ADL session."
@@ -431,15 +598,37 @@ status_cmd() {
   session_status="$(env_get "$sf" ADL_STATUS)"
   active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
+  run_status=""
+  if [[ -n "$active" ]]; then
+    active_env="$SESSIONS_DIR/$sid/runs/$active/run.env"
+    [[ -f "$active_env" ]] && run_status="$(env_get "$active_env" ADL_RUN_STATUS || true)"
+  fi
   next_action="Start or send a Dev handoff."
-  [[ -z "$dev_term" ]] && next_action="Connect Dev with $(skill_invocation adl-connect) $(env_get "$sf" ADL_PIN)."
-  [[ -n "$active" ]] && next_action="Review active run state or wait for Dev report."
+  if [[ -z "$dev_term" ]]; then
+    next_action="Connect Dev with $(skill_invocation adl-connect) $(env_get "$sf" ADL_PIN)."
+  elif [[ -n "$active" ]]; then
+    case "$run_status" in
+      pending_dev_connection|sent_to_dev)
+        next_action="Wait for Dev report or explicitly supersede active run $active."
+        ;;
+      reported)
+        next_action="Review active run $active, then record a verdict."
+        ;;
+      accepted|accepted_with_notes|passed_back|blocked)
+        next_action="Send the next handoff if more work remains."
+        ;;
+      *)
+        next_action="Review active run state or wait for Dev report."
+        ;;
+    esac
+  fi
   print -r -- "ADL session: $sid"
   print -r -- "Root: $PWD"
   print -r -- "Pin: $(env_get "$sf" ADL_PIN)"
   print -r -- "Status: $session_status"
   [[ -n "$dev_term" ]] && print -r -- "Dev: connected" || print -r -- "Dev: not connected"
   print -r -- "Active run: $active"
+  [[ -n "$run_status" ]] && print -r -- "Run status: $run_status"
   print -r -- "Next: $next_action"
   log_event "status session=$sid status=$session_status active_run=${active:-absent} dev_terminal=${dev_term:-absent}"
 }
@@ -495,8 +684,8 @@ doctor_cmd() {
   print -r -- "run.status: $(present_or_absent "$run_status")"
   [[ -n "$architect_adapter" && -n "$architect_terminal" ]] && print -r -- "transport.architect: present ($architect_adapter)" || print -r -- "transport.architect: missing"
   [[ -n "$dev_adapter" && -n "$dev_terminal" ]] && print -r -- "transport.dev: present ($dev_adapter)" || print -r -- "transport.dev: missing"
-  [[ -n "$architect_terminal" && "$architect_terminal" == "$dev_terminal" ]] && print -r -- "transport.warning: architect and dev terminal ids match; run \$adl reconnect in the Architect pane"
-  [[ -z "$architect_terminal" || ( -n "$dev_terminal" && "$architect_terminal" == "$dev_terminal" ) ]] && print -r -- "next: run \$adl reconnect in Architect pane"
+  [[ -n "$architect_terminal" && "$architect_terminal" == "$dev_terminal" ]] && print -r -- "transport.warning: architect and dev terminal ids match; run $(skill_invocation adl) reconnect in the Architect pane"
+  [[ -z "$architect_terminal" || ( -n "$dev_terminal" && "$architect_terminal" == "$dev_terminal" ) ]] && print -r -- "next: run $(skill_invocation adl) reconnect in Architect pane"
   if [[ -f "$GLOBAL_MARKER" ]]; then
     print -r -- "global.marker: present ($GLOBAL_MARKER)"
     print -r -- "global.version: $(present_or_absent "$marker_version")"
@@ -546,7 +735,8 @@ case "${1:-}" in
       start) shift; start_architect "${1:-}" ;;
       reconnect) shift; reconnect_architect ;;
       send-dev) shift; send_dev "$@" ;;
-      *) die "Usage: adl architect start [--new] | reconnect | send-dev --prompt-file <path>" ;;
+      review) shift; review_run "$@" ;;
+      *) die "Usage: adl architect start [--new] | reconnect | send-dev --prompt-file <path> | review --verdict <verdict> --review-file <path>" ;;
     esac
     ;;
   dev)

@@ -37,7 +37,7 @@ Connection invalid
 
 If that happens, rerun the exact same CLI command with escalation/outside-sandbox access. Do not change the pin or drop `--replace`.
 
-After a successful connection, ADL notifies Architect that Dev is connected and ready. Read the printed `dev-brief.md`, then wait for the first `Architect's Request:` instead of starting work on your own.
+After a successful connection, ADL notifies Architect that Dev is connected and ready. Read the printed `dev-brief.md`. If the connect output includes `Pending Architect's Request: <path>`, read and execute that prompt immediately; otherwise wait for the first `Architect's Request:` instead of starting work on your own.
 
 For every `Architect's Request:`, read the requested `dev-prompt.md`, execute only that scope, write `dev-report.md`, and run:
 
@@ -48,5 +48,30 @@ For every `Architect's Request:`, read the requested `dev-prompt.md`, execute on
 ## Tooling Preference
 
 Prefer `rtk` for repo reads and searches when it is available. If `rtk` is not available in this shell, silently use the normal shell equivalent such as `sed`, `rg`, `find`, or `git`. Do not stop, complain, or report that `rtk` is unavailable unless the task specifically depends on `rtk`.
+
+Work autonomously inside the handoff boundaries. Make small implementation decisions implied by the repo and prompt. Stop and report `NEEDS_CONTEXT` only for missing required context, destructive actions, credentials, major structural changes, or scope conflicts.
+
+Every `dev-report.md` must use this compact acceptance-shaped contract:
+
+```text
+# Dev Report
+
+Status: DONE | BLOCKED | NEEDS_CONTEXT
+Goal:
+Slice:
+
+## Acceptance Results
+- [criterion] PASS | FAIL | NOT VERIFIED - evidence or reason
+
+## Files Changed
+
+## Verification
+- Command:
+- Result:
+
+## Deviations
+
+## Residual Risks
+```
 
 Do not treat your own report as approval. Architect reports are reviewed as leads, not proof, and the Architect will verify repo state before accepting the work.

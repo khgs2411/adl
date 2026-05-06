@@ -15,7 +15,7 @@ export ADL_CODEX_SKILLS_DIR="$TMP/skills"
 expected_cli_version="$(grep '^VERSION=' "$ROOT/scripts/adl" | sed 's/VERSION="//;s/"//')"
 
 mkdir -p "$ADL_CODEX_SKILLS_DIR/adl"
-cat > "$ADL_CODEX_SKILLS_DIR/adl/.adl-framework" <<MARKER
+/bin/cat > "$ADL_CODEX_SKILLS_DIR/adl/.adl-framework" <<MARKER
 ADL_VERSION='9.9.9'
 ADL_SOURCE='$ROOT'
 MARKER
@@ -36,7 +36,16 @@ session_id="$(cat .adl/active-session)"
 pin="$(grep "^ADL_PIN=" ".adl/sessions/$session_id/session.env" | sed "s/ADL_PIN='//;s/'$//")"
 
 mkdir -p .adl/staging
-print -r -- "Doctor run prompt" > .adl/staging/prompt.md
+/bin/cat > .adl/staging/prompt.md <<'PROMPT'
+Goal: Doctor test
+Slice: Create pending doctor run
+Approved context: Test fixture only.
+Acceptance criteria:
+- Doctor reports active run.
+In scope: ADL state.
+Out of scope: Real terminal automation.
+Expected evidence: doctor output.
+PROMPT
 "$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt.md >/dev/null
 "$ROOT/scripts/adl" dev connect "$pin" >/dev/null
 

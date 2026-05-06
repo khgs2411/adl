@@ -1,0 +1,28 @@
+#!/bin/zsh
+set -euo pipefail
+
+RM="/bin/rm"
+
+die() {
+  print -r -- "$*" >&2
+  exit 1
+}
+
+[[ "$#" == "1" ]] || die "Usage: adl-clear <cwd/.adl>"
+
+target="${1:A}"
+expected="${PWD:A}/.adl"
+
+[[ "$target" == "$expected" ]] || die "Refusing to clear anything except this working directory's .adl: $expected"
+[[ "${target:t}" == ".adl" ]] || die "Refusing to clear a non-.adl path: $target"
+[[ ! -L "$target" ]] || die "Refusing to clear symlinked .adl path: $target"
+
+if [[ ! -e "$target" ]]; then
+  print -r -- "No ADL state found: $target"
+  exit 0
+fi
+
+[[ -d "$target" ]] || die "Refusing to clear non-directory .adl path: $target"
+
+"$RM" -rf -- "$target"
+print -r -- "Cleared ADL state: $target"
