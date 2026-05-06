@@ -2,14 +2,15 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.4.6"
+VERSION="0.4.10"
 UPDATE=0
 TARGET_RUNTIME="all"
 BUMP_MODE="patch"
 BUMP_MODE_SET=0
+INSTALL_TRANSPORT="${ADL_INSTALL_TRANSPORT:-}"
 
 usage() {
-  print -r -- "Usage: .install.sh [--update] [--minor|--major] [--codex|--claude]" >&2
+  print -r -- "Usage: .install.sh [--update] [--minor|--major] [--codex|--claude] [--transport ghostty-macos|tmux|terminal-macos|auto]" >&2
 }
 
 set_bump_mode() {
@@ -30,6 +31,11 @@ while [[ "$#" -gt 0 ]]; do
     --major) set_bump_mode major ;;
     --codex) TARGET_RUNTIME="codex" ;;
     --claude) TARGET_RUNTIME="claude" ;;
+    --transport)
+      shift
+      [[ -n "${1:-}" ]] || { usage; exit 2; }
+      INSTALL_TRANSPORT="$1"
+      ;;
     *) usage; exit 2 ;;
   esac
   shift
@@ -41,6 +47,92 @@ DATE="/bin/date"
 MKDIR="/bin/mkdir"
 RM="/bin/rm"
 PERL="/usr/bin/perl"
+UNAME="/usr/bin/uname"
+
+valid_transport() {
+  case "$1" in
+    ghostty-macos|tmux|terminal-macos|auto) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+detect_os() {
+  case "$("$UNAME" -s 2>/dev/null || print unknown)" in
+    Darwin) print -r -- "macos" ;;
+    Linux)
+      if [[ -n "${WSL_DISTRO_NAME:-}" || -n "${WSL_INTEROP:-}" ]]; then
+        print -r -- "wsl"
+      else
+        print -r -- "linux"
+      fi
+      ;;
+    CYGWIN*|MINGW*|MSYS*) print -r -- "windows" ;;
+    *) print -r -- "unknown" ;;
+  esac
+}
+
+supported_transports() {
+  local os="$1"
+  local choices=()
+  case "$os" in
+    macos)
+      [[ "${TERM_PROGRAM:-}" == "ghostty" || -n "${GHOSTTY_RESOURCES_DIR:-}" || -d "/Applications/Ghostty.app" || -d "$HOME/Applications/Ghostty.app" ]] && choices+=("ghostty-macos")
+      choices+=("terminal-macos")
+      command -v tmux >/dev/null 2>&1 && choices+=("tmux")
+      ;;
+    linux|wsl)
+      command -v tmux >/dev/null 2>&1 && choices+=("tmux")
+      ;;
+    *)
+      ;;
+  esac
+  print -r -- "${(j: :)choices}"
+}
+
+choose_transport() {
+  local os choices choice index
+  os="$(detect_os)"
+  choices=("${(@s: :)$(supported_transports "$os")}")
+
+  if [[ -n "$INSTALL_TRANSPORT" ]]; then
+    valid_transport "$INSTALL_TRANSPORT" || {
+      print -r -- "Unsupported ADL transport: $INSTALL_TRANSPORT" >&2
+      usage
+      exit 2
+    }
+    print -r -- "$INSTALL_TRANSPORT"
+    return
+  fi
+
+  if (( ${#choices[@]} == 0 )); then
+    print -r -- "No supported ADL transport detected for $os. Re-run with --transport ghostty-macos, --transport tmux, or --transport terminal-macos if you know the adapter is available." >&2
+    exit 6
+  fi
+
+  if (( ${#choices[@]} == 1 )); then
+    print -r -- "$choices[1]"
+    return
+  fi
+
+  if [[ ! -t 0 ]]; then
+    print -r -- "Multiple ADL transports are supported for $os: ${(j:, :)choices}. Re-run with --transport <adapter> or ADL_INSTALL_TRANSPORT=<adapter>." >&2
+    exit 6
+  fi
+
+  print -r -- "Select ADL transport for $os:" >&2
+  for index in {1..${#choices[@]}}; do
+    print -r -- "  $index) $choices[$index]" >&2
+  done
+  printf "Transport [1-%d]: " "${#choices[@]}" >&2
+  read -r choice
+  [[ "$choice" == <-> && "$choice" -ge 1 && "$choice" -le "${#choices[@]}" ]] || {
+    print -r -- "Invalid transport choice: $choice" >&2
+    exit 6
+  }
+  print -r -- "$choices[$choice]"
+}
+
+SELECTED_TRANSPORT="$(choose_transport)"
 
 require_file() {
   [[ -f "$1" ]] || {
@@ -52,6 +144,8 @@ require_file() {
 require_file "$ROOT/scripts/adl"
 require_file "$ROOT/scripts/adl-clear"
 require_file "$ROOT/scripts/ghostty-macos"
+require_file "$ROOT/scripts/tmux"
+require_file "$ROOT/scripts/terminal-macos"
 
 bumped_version() {
   local mode="$1"
@@ -124,6 +218,7 @@ install_runtime() {
   local connect_target="$skills_dir/adl-connect"
   local backup_root="$skills_dir/.adl-project-backups"
   local marker="$adl_target/.adl-framework"
+  local config="$adl_target/.adl-config"
 
   require_file "$source_skills_dir/adl/SKILL.md"
   require_file "$source_skills_dir/adl-clear/SKILL.md"
@@ -160,7 +255,9 @@ install_runtime() {
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
   "$CP" "$ROOT/scripts/adl-clear" "$clear_target/scripts/adl-clear"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
-  "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"
+  "$CP" "$ROOT/scripts/tmux" "$adl_target/scripts/tmux"
+  "$CP" "$ROOT/scripts/terminal-macos" "$adl_target/scripts/terminal-macos"
+  "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos" "$adl_target/scripts/tmux" "$adl_target/scripts/terminal-macos"
   "$CHMOD" +x "$clear_target/scripts/adl-clear"
 
   {
@@ -168,7 +265,12 @@ install_runtime() {
     print -r -- "ADL_SOURCE='$ROOT'"
   } > "$marker"
 
+  {
+    print -r -- "ADL_TRANSPORT='$SELECTED_TRANSPORT'"
+  } > "$config"
+
   print -r -- "Installed $runtime_label $VERSION into $skills_dir"
+  print -r -- "Configured ADL transport for $runtime: $SELECTED_TRANSPORT"
 }
 
 case "$TARGET_RUNTIME" in

@@ -87,15 +87,33 @@ Do not create the first run until Dev is connected, unless the user explicitly a
 
 If `send-dev` reports `Failed to wake Dev`, do not recreate the prompt from memory. Run `adl status`, use the active run's copied `dev-prompt.md` as the source of truth, reconnect Dev, then either wake the existing active run or send a new prompt that explicitly supersedes the failed run.
 
-## Ghostty Capture Recovery
+## Transport Capture Recovery
 
-Architect start and reconnect also capture the focused Ghostty pane. If capture fails in Claude Code with an automation, `osascript`, Ghostty, or connection error, rerun the same CLI command after granting local automation access. If it still fails, run:
+Architect start and reconnect also capture the selected ADL transport target for this role. Successful capture persists role-specific session metadata in `.adl/`, including OS, terminal, adapter, terminal id, and human-readable label. Architect and Dev may use different stored adapters in the same session, such as Architect in Ghostty and Dev in Terminal.app.
+
+ADL normally uses the transport configured during install or update. If the configured transport is wrong for this terminal, rerun the same CLI command with an explicit one-command override:
+
+```text
+ADL_TRANSPORT=ghostty-macos {{ADL_SKILLS_DIR}}/adl/scripts/adl architect reconnect
+ADL_TRANSPORT=tmux {{ADL_SKILLS_DIR}}/adl/scripts/adl architect reconnect
+ADL_TRANSPORT=terminal-macos {{ADL_SKILLS_DIR}}/adl/scripts/adl architect reconnect
+```
+
+`ADL_TRANSPORT=auto` remains available as an explicit diagnostic/setup helper, but it is not the default product path.
+
+For generic capture diagnostics, run:
+
+```text
+{{ADL_SKILLS_DIR}}/adl/scripts/adl doctor transport architect
+```
+
+For Ghostty-specific compatibility diagnostics, run:
 
 ```text
 {{ADL_SKILLS_DIR}}/adl/scripts/adl doctor ghostty architect
 ```
 
-Then grant macOS Automation permission for `osascript` to control Ghostty if the doctor output asks for it.
+If the selected adapter uses AppleScript (`ghostty-macos` or `terminal-macos`) and capture fails in Claude Code with an `osascript`, automation, or connection error, rerun the same CLI command after granting local automation access. Then grant macOS Automation permission for `osascript` to control the target terminal if the doctor output asks for it.
 
 ## Review Dev Reports
 

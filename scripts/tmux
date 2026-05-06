@@ -1,0 +1,52 @@
+#!/bin/zsh
+set -euo pipefail
+
+cmd="${1:-}"
+
+die_transport() {
+  print -r -- "$*" >&2
+  exit 3
+}
+
+require_tmux() {
+  command -v tmux >/dev/null 2>&1 || die_transport "tmux transport requires tmux on PATH."
+}
+
+require_tmux_context() {
+  [[ -n "${TMUX:-}" ]] || die_transport "tmux transport requires running inside a tmux session."
+}
+
+capture_focused() {
+  local role="$1"
+  local role_upper="${role:u}"
+  local pane_id
+  [[ "$role" == "architect" || "$role" == "dev" ]] || die_transport "Usage: tmux capture-focused architect|dev"
+  require_tmux
+  require_tmux_context
+  pane_id="$(tmux display-message -p '#{pane_id}')" || die_transport "tmux capture failed."
+  [[ -n "$pane_id" ]] || die_transport "tmux capture returned an empty pane id."
+  print -r -- "ADL_${role_upper}_ADAPTER='tmux'"
+  print -r -- "ADL_${role_upper}_TERMINAL_ID='$pane_id'"
+  print -r -- "ADL_${role_upper}_LABEL='tmux pane $pane_id'"
+}
+
+send_message() {
+  local pane_id="${1:-}"
+  local message="${2:-}"
+  [[ -n "$pane_id" ]] || die_transport "Missing pane id"
+  [[ -n "$message" ]] || die_transport "Missing message"
+  require_tmux
+  tmux send-keys -t "$pane_id" "$message" Enter || die_transport "tmux send failed. Reconnect the target pane and retry."
+}
+
+case "$cmd" in
+  capture-focused)
+    capture_focused "${2:-}"
+    ;;
+  send)
+    send_message "${2:-}" "${3:-}"
+    ;;
+  *)
+    die_transport "Usage: tmux capture-focused architect|dev | send <pane-id> <message>"
+    ;;
+esac

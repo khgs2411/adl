@@ -25,17 +25,33 @@ When invoked as `$adl-connect <pin> --replace`, run:
 {{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin> --replace
 ```
 
-## Ghostty Capture Recovery
+## Transport Capture Recovery
 
-Connecting records this Codex pane as the Dev transport target through Ghostty AppleScript. In Codex, that command may fail inside the sandbox with messages such as:
+Connecting records this Codex pane as the Dev transport target for the selected ADL adapter. Successful capture persists role-specific session metadata in `.adl/`, including OS, terminal, adapter, terminal id, and human-readable label. Architect and Dev may use different stored adapters in the same session, such as Architect in Ghostty and Dev in Terminal.app.
+
+ADL normally uses the transport configured during install or update. If the configured transport is wrong for this terminal, rerun the same CLI command with an explicit one-command override. Do not change the pin or drop `--replace`.
 
 ```text
-Ghostty capture failed
-Can’t get application "Ghostty". (-1728)
-Connection invalid
+ADL_TRANSPORT=ghostty-macos {{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>
+ADL_TRANSPORT=tmux {{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>
+ADL_TRANSPORT=terminal-macos {{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>
 ```
 
-If that happens, rerun the exact same CLI command with escalation/outside-sandbox access. Do not change the pin or drop `--replace`.
+`ADL_TRANSPORT=auto` remains available as an explicit diagnostic/setup helper, but it is not the default product path.
+
+For generic capture diagnostics, run:
+
+```text
+{{ADL_SKILLS_DIR}}/adl/scripts/adl doctor transport dev
+```
+
+For Ghostty-specific compatibility diagnostics, run:
+
+```text
+{{ADL_SKILLS_DIR}}/adl/scripts/adl doctor ghostty dev
+```
+
+If the selected adapter uses AppleScript (`ghostty-macos` or `terminal-macos`) and capture fails in Codex with a sandbox, `osascript`, automation, or connection error, rerun the exact same CLI command with escalation/outside-sandbox access.
 
 After a successful connection, ADL notifies Architect that Dev is connected and ready. Read the printed `dev-brief.md`. If the connect output includes `Pending Architect's Request: <path>`, read and execute that prompt immediately; otherwise wait for the first `Architect's Request:` instead of starting work on your own.
 

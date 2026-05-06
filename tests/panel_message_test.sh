@@ -22,10 +22,12 @@ case "${1:-}" in
       architect)
         print -r -- "ADL_ARCHITECT_ADAPTER='ghostty-macos'"
         print -r -- "ADL_ARCHITECT_TERMINAL_ID='fake-architect-terminal'"
+        print -r -- "ADL_ARCHITECT_LABEL='fake architect'"
         ;;
       dev)
         print -r -- "ADL_DEV_ADAPTER='ghostty-macos'"
         print -r -- "ADL_DEV_TERMINAL_ID='fake-dev-terminal'"
+        print -r -- "ADL_DEV_LABEL='fake dev'"
         ;;
       *)
         exit 3
@@ -50,6 +52,7 @@ chmod +x "$FAKE_ADAPTER_DIR/ghostty-macos"
 
 export ADL_SCRIPT_ROOT="$FAKE_ADAPTER_DIR"
 export ADL_MESSAGE_LOG="$MESSAGE_LOG"
+export ADL_TRANSPORT=ghostty-macos
 
 write_dev_prompt() {
   local path="$1"

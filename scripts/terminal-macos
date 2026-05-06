@@ -1,0 +1,94 @@
+#!/bin/zsh
+set -euo pipefail
+
+cmd="${1:-}"
+OSASCRIPT="${ADL_OSASCRIPT:-/usr/bin/osascript}"
+
+die_transport() {
+  print -r -- "$*" >&2
+  exit 3
+}
+
+escape_applescript_text() {
+  local text="$1"
+  text="${text//\\/\\\\}"
+  text="${text//\"/\\\"}"
+  print -r -- "$text"
+}
+
+require_macos() {
+  [[ "${ADL_TERMINAL_MACOS_TEST:-0}" == "1" ]] && return
+  [[ "$(/usr/bin/uname -s)" == "Darwin" ]] || die_transport "terminal-macos transport requires macOS Terminal.app."
+}
+
+require_osascript() {
+  [[ -x "$OSASCRIPT" ]] || die_transport "terminal-macos transport requires osascript at $OSASCRIPT."
+}
+
+capture_focused() {
+  local role="$1"
+  local role_upper="${role:u}"
+  local tty
+  [[ "$role" == "architect" || "$role" == "dev" ]] || die_transport "Usage: terminal-macos capture-focused architect|dev"
+  require_macos
+  require_osascript
+  tty="$("$OSASCRIPT" <<'APPLESCRIPT'
+tell application "Terminal"
+  if not (exists front window) then error "Terminal has no front window"
+  set selectedTab to selected tab of front window
+  return tty of selectedTab
+end tell
+APPLESCRIPT
+)" || die_transport "Terminal.app capture failed. Grant automation permission for osascript to control Terminal, then reconnect."
+  [[ -n "$tty" ]] || die_transport "Terminal.app capture returned an empty tty."
+  print -r -- "ADL_${role_upper}_ADAPTER='terminal-macos'"
+  print -r -- "ADL_${role_upper}_TERMINAL_ID='$tty'"
+  print -r -- "ADL_${role_upper}_LABEL='Terminal.app $tty'"
+}
+
+send_message() {
+  local target_tty="${1:-}"
+  local message="${2:-}"
+  local escaped
+  [[ -n "$target_tty" ]] || die_transport "Missing Terminal.app target tty"
+  [[ -n "$message" ]] || die_transport "Missing message"
+  require_macos
+  require_osascript
+  escaped="$(escape_applescript_text "$message")"
+  "$OSASCRIPT" <<APPLESCRIPT || die_transport "Terminal.app send failed. Reconnect the target Terminal tab and retry."
+tell application "Terminal"
+  set targetTty to "$target_tty"
+  set targetTab to missing value
+  set targetWindow to missing value
+  repeat with candidateWindow in every window
+    repeat with candidateTab in every tab of candidateWindow
+      if (tty of candidateTab) is targetTty then
+        set targetTab to candidateTab
+        set targetWindow to candidateWindow
+        exit repeat
+      end if
+    end repeat
+    if targetTab is not missing value then exit repeat
+  end repeat
+  if targetTab is missing value then error "target tty not found"
+  set selected tab of targetWindow to targetTab
+  set index of targetWindow to 1
+  activate
+  do script "$escaped" in targetTab
+end tell
+delay 0.1
+tell application "System Events" to key code 36
+APPLESCRIPT
+}
+
+case "$cmd" in
+  capture-focused)
+    capture_focused "${2:-}"
+    ;;
+  send)
+    send_message "${2:-}" "${3:-}"
+    ;;
+  *)
+    die_transport "Usage: terminal-macos capture-focused architect|dev | send <target-tty> <message>"
+    ;;
+esac

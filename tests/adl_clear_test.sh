@@ -9,6 +9,7 @@ trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
 
 export ADL_GHOSTTY_DRY_RUN=1
+export ADL_TRANSPORT=ghostty-macos
 export ADL_SCRIPT_ROOT="$ROOT/scripts"
 ADL_PATH="${PWD:A}/.adl"
 

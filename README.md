@@ -14,7 +14,7 @@ AI coding sessions are useful, but long-lived work breaks down when authority is
 Skills are intent.
 CLI is authority.
 .adl is truth.
-Ghostty is transport.
+Transport is explicit state.
 ```
 
 That means:
@@ -22,7 +22,7 @@ That means:
 - Skills describe how the Architect and Developer should behave.
 - The `adl` CLI owns session state, handoffs, notifications, and reports.
 - `.adl/` is the local source of truth for the active working directory.
-- Ghostty is the current terminal transport adapter.
+- Transport adapters are captured per role and stored in `.adl/`.
 
 Developer reports, changed files, and passing tests are evidence. They are not approval. Architect approval is a human review verdict for the active slice.
 
@@ -37,7 +37,29 @@ ADL V1 targets:
 
 ADL does not scrape arbitrary terminal output, approve work automatically, or create remote repositories for you.
 
-The Ghostty/macOS dependency is a transport limitation, not a product boundary. The protocol is intentionally shaped so future adapters can support other terminals and operating systems.
+The Ghostty/macOS dependency is a production baseline, not a product boundary. The installer detects the OS, records one operator-chosen transport per installed runtime, and the protocol stores Architect and Dev transport metadata separately after capture so a session can route handoffs and reports through different adapters.
+
+Supported transport adapters are `ghostty-macos`, `tmux`, and `terminal-macos`. Explicit `ADL_TRANSPORT=<adapter>` overrides the installed runtime config for one command. `ADL_TRANSPORT=auto` remains available as an explicit diagnostic/setup helper, but it is not the default product path.
+
+Experimental tmux transport is available for operators who already run both ADL panes inside tmux:
+
+```sh
+ADL_TRANSPORT=tmux adl
+ADL_TRANSPORT=tmux adl-connect <pin>
+```
+
+Ghostty remains the production baseline. The tmux adapter expects existing tmux panes; ADL does not create tmux sessions or panes for you.
+
+Experimental macOS Terminal.app transport is also available:
+
+```sh
+ADL_TRANSPORT=terminal-macos adl
+ADL_TRANSPORT=terminal-macos adl-connect <pin>
+```
+
+`terminal-macos` targets Terminal.app tabs by their `tty` value and uses AppleScript through `osascript`. It is experimental, macOS-only, and may require macOS Automation permission for `osascript` to control Terminal.
+
+Linux and WSL users should prefer `ADL_TRANSPORT=tmux` for now. ADL does not currently provide generic Windows Terminal, PowerShell, Linux GUI terminal, or raw TTY adapters.
 
 ## How The Loop Works
 
@@ -61,6 +83,21 @@ Install or update both Codex and Claude Code skills:
 ```
 
 By default, the installer writes Codex skills to `$HOME/.codex/skills` and Claude Code skills to `$HOME/.claude/skills`. The installed skill text is rewritten to call the CLI from the actual install directory.
+
+During install, ADL detects the OS and asks you to choose a supported transport for the installed runtime. The choice is saved adjacent to that runtime's installed `adl` skill directory as `.adl-config`, not in any project `.adl/` state. Codex and Claude installs can have different configs. Reinstall or update to change the configured transport.
+
+Conservative choices:
+
+- macOS may offer `ghostty-macos`, `terminal-macos`, and `tmux` when available.
+- Linux and WSL may offer `tmux` when `tmux` is installed.
+- Windows has no generic supported GUI terminal adapter yet.
+
+For automation or tests, pass the transport non-interactively:
+
+```sh
+./.install.sh --transport ghostty-macos
+ADL_INSTALL_TRANSPORT=tmux ./.install.sh --update
+```
 
 Override either target when needed:
 
@@ -123,6 +160,8 @@ Check local state and installed runtime metadata:
 
 ```sh
 adl doctor
+adl doctor transport architect
+adl doctor transport dev
 adl doctor ghostty architect
 adl doctor ghostty dev
 ```

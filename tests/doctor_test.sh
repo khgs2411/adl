@@ -19,6 +19,24 @@ mkdir -p "$ADL_CODEX_SKILLS_DIR/adl"
 ADL_VERSION='9.9.9'
 ADL_SOURCE='$ROOT'
 MARKER
+/bin/cat > "$ADL_CODEX_SKILLS_DIR/adl/.adl-config" <<CONFIG
+ADL_TRANSPORT='ghostty-macos'
+CONFIG
+
+NO_CONFIG_DIR="$TMP/no-config-doctor"
+NO_CONFIG_RUNTIME="$TMP/no-config-runtime/adl"
+mkdir -p "$NO_CONFIG_RUNTIME"
+mkdir -p "$NO_CONFIG_DIR"
+(
+  cd "$NO_CONFIG_DIR"
+  unset ADL_TRANSPORT
+  export ADL_RUNTIME_ADL_DIR="$NO_CONFIG_RUNTIME"
+  no_config_doctor="$("$ROOT/scripts/adl" doctor)"
+  assert_contains "$no_config_doctor" "transport.selected: absent" "plain doctor should not require configured transport"
+  assert_contains "$no_config_doctor" "transport.resolved: unknown" "plain doctor should report unresolved missing transport"
+  assert_contains "$no_config_doctor" "transport.adapter: not resolved" "plain doctor should avoid adapter lookup without config"
+  assert_contains "$no_config_doctor" "next: reinstall or update ADL with a transport choice" "plain doctor should print setup hint for missing config"
+)
 
 empty_doctor="$("$ROOT/scripts/adl" doctor)"
 assert_contains "$empty_doctor" "cli.version: $expected_cli_version" "doctor should print CLI version"
@@ -28,7 +46,9 @@ assert_contains "$empty_doctor" "adl.dir: missing" "doctor should report missing
 assert_contains "$empty_doctor" "session.id: absent" "doctor should report absent session"
 assert_contains "$empty_doctor" "global.marker: present ($ADL_CODEX_SKILLS_DIR/adl/.adl-framework)" "doctor should report marker path"
 assert_contains "$empty_doctor" "global.version: 9.9.9" "doctor should report installed version"
-assert_contains "$empty_doctor" "ghostty.adapter: executable ($ROOT/scripts/ghostty-macos)" "doctor should report adapter executable"
+assert_contains "$empty_doctor" "transport.selected: ghostty-macos" "doctor should report configured transport"
+assert_contains "$empty_doctor" "transport.resolved: ghostty-macos" "doctor should report resolved transport"
+assert_contains "$empty_doctor" "transport.adapter: executable ($ROOT/scripts/ghostty-macos)" "doctor should report selected adapter executable"
 
 start="$("$ROOT/scripts/adl" architect start)"
 assert_contains "$start" "ADL session ready" "start should create a dry-run session"
@@ -74,3 +94,9 @@ assert_contains "$ghostty_arch" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-te
 
 ghostty_dev="$("$ROOT/scripts/adl" doctor ghostty dev)"
 assert_contains "$ghostty_dev" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "ghostty doctor should include dev capture output"
+
+transport_dev="$("$ROOT/scripts/adl" doctor transport dev)"
+assert_contains "$transport_dev" "ADL doctor transport" "generic transport doctor should print heading"
+assert_contains "$transport_dev" "transport: ghostty-macos" "generic transport doctor should report configured transport"
+assert_contains "$transport_dev" "transport.resolved: ghostty-macos" "generic transport doctor should report resolved transport"
+assert_contains "$transport_dev" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "generic transport doctor should include dev capture output"
