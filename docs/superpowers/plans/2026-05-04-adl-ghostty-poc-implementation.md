@@ -25,7 +25,7 @@
   Ghostty transport adapter. Captures focused terminal metadata and sends short wake-up messages through AppleScript. Supports `ADL_GHOSTTY_DRY_RUN=1` for automated tests.
 
 - Modify: `.install.sh`  
-  Idempotently installs the two global skills and script files into `/Users/liadgoren/.codex/skills`, backing up the existing global `adl` skill unless it already has the ADL framework marker.
+  Idempotently installs the two global skills and script files into `$HOME/.codex/skills`, backing up the existing global `adl` skill unless it already has the ADL framework marker.
 
 - Create: `tests/run.sh`  
   Shell test harness that runs all automated tests.
@@ -198,7 +198,7 @@ set -euo pipefail
 
 ROOT="${0:A:h}"
 VERSION="0.1.0"
-SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
+SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 ADL_TARGET="$SKILLS_DIR/adl"
 CONNECT_TARGET="$SKILLS_DIR/adl-connect"
 BACKUP_ROOT="$SKILLS_DIR/.adl-project-backups"
@@ -838,7 +838,7 @@ send_dev() {
   env_set "$sf" ADL_ACTIVE_RUN "$rid"
   env_set "$sf" ADL_STATUS "$status"
   if [[ -n "$dev_term" ]]; then
-    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md, then run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry."
+    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md, then run $HOME/.codex/skills/adl/scripts/adl dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry."
     env_set "$rdir/run.env" ADL_RUN_STATUS sent_to_dev
     env_set "$rdir/run.env" ADL_SENT_AT "$(now_ts)"
     env_set "$sf" ADL_STATUS sent_to_dev
@@ -865,7 +865,7 @@ For each Architect's Request:
 1. Read the requested dev-prompt.md.
 2. Execute only that scope.
 3. Write dev-report.md using the requested template.
-4. Run /Users/liadgoren/.codex/skills/adl/scripts/adl dev notify.
+4. Run $HOME/.codex/skills/adl/scripts/adl dev notify.
 
 Do not commit unless explicitly instructed.
 Do not broaden scope.
@@ -1000,7 +1000,7 @@ You are the Architect in an Architect-Developer Loop.
 The CLI is authoritative:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl
+$HOME/.codex/skills/adl/scripts/adl
 ```
 
 ## Start Or Resume
@@ -1008,13 +1008,13 @@ The CLI is authoritative:
 When invoked as `$adl`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start
+$HOME/.codex/skills/adl/scripts/adl architect start
 ```
 
 When invoked as `$adl new`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start --new
+$HOME/.codex/skills/adl/scripts/adl architect start --new
 ```
 
 ## Send Work To Dev
@@ -1027,7 +1027,7 @@ When you have a Dev handoff or follow-up:
 4. Run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
+$HOME/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
 5. Tell the user only a short status such as `Passing this to the developer...`.
@@ -1054,25 +1054,25 @@ You are the Developer in an Architect-Developer Loop.
 The CLI is authoritative:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl
+$HOME/.codex/skills/adl/scripts/adl
 ```
 
 When invoked as `$adl-connect <pin>`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev connect <pin>
+$HOME/.codex/skills/adl/scripts/adl dev connect <pin>
 ```
 
 When invoked as `$adl-connect <pin> --replace`, run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev connect <pin> --replace
+$HOME/.codex/skills/adl/scripts/adl dev connect <pin> --replace
 ```
 
 After connecting, read the printed `dev-brief.md`. For every `Architect's Request:`, read the requested `dev-prompt.md`, execute only that scope, write `dev-report.md`, and run:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev notify
+$HOME/.codex/skills/adl/scripts/adl dev notify
 ```
 ```
 

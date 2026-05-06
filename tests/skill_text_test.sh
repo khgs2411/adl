@@ -10,6 +10,18 @@ connect_skill_text="$(cat "$ROOT/skills/adl-connect/SKILL.md")"
 claude_skill_text="$(cat "$ROOT/skills-claude/adl/SKILL.md")"
 claude_clear_skill_text="$(cat "$ROOT/skills-claude/adl-clear/SKILL.md")"
 claude_connect_skill_text="$(cat "$ROOT/skills-claude/adl-connect/SKILL.md")"
+all_skill_text="$skill_text
+$clear_skill_text
+$connect_skill_text
+$claude_skill_text
+$claude_clear_skill_text
+$claude_connect_skill_text"
+
+assert_not_contains "$all_skill_text" "/Users/liadgoren/.codex/skills" "source skill templates should not contain maintainer-local Codex paths"
+assert_not_contains "$all_skill_text" "/Users/liadgoren/.claude/skills" "source skill templates should not contain maintainer-local Claude paths"
+assert_contains "$skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Codex Architect template should use install path token"
+assert_contains "$connect_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>" "Codex connect template should use install path token"
+assert_contains "$clear_skill_text" '{{ADL_SKILLS_DIR}}/adl-clear/scripts/adl-clear "$PWD/.adl"' "Codex clear template should use install path token"
 
 assert_contains "$skill_text" "adl architect reconnect" "Architect skill should document reconnect command"
 assert_contains "$skill_text" "\$adl reconnect" "Architect skill should document skill-level reconnect invocation"
@@ -38,10 +50,10 @@ assert_contains "$connect_skill_text" "Pending Architect's Request: <path>" "Dev
 assert_contains "$connect_skill_text" "## Acceptance Results" "Dev connect skill should require acceptance-shaped reports"
 assert_contains "$connect_skill_text" "Work autonomously inside the handoff boundaries" "Dev connect skill should preserve Dev autonomy inside scope"
 assert_contains "$clear_skill_text" 'When invoked as `$adl-clear`' "ADL clear skill should document codex invocation"
-assert_contains "$clear_skill_text" '/Users/liadgoren/.codex/skills/adl-clear/scripts/adl-clear "$PWD/.adl"' "ADL clear skill should pass cwd .adl to clear script"
+assert_contains "$clear_skill_text" '{{ADL_SKILLS_DIR}}/adl-clear/scripts/adl-clear "$PWD/.adl"' "ADL clear skill should pass cwd .adl to clear script"
 assert_contains "$clear_skill_text" "not as a project artifact" "ADL clear skill should frame .adl as protocol state"
 assert_contains "$claude_skill_text" "Claude Code" "Claude Architect skill should name Claude Code"
-assert_contains "$claude_skill_text" "/Users/liadgoren/.claude/skills/adl/scripts/adl" "Claude Architect skill should use Claude CLI path"
+assert_contains "$claude_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Claude Architect skill should use install path token"
 assert_contains "$claude_skill_text" "/adl reconnect" "Claude Architect skill should use slash invocation language"
 assert_contains "$claude_skill_text" "Connect Dev with /adl-connect 123456" "Claude Architect skill should tell users to connect with slash skill and real pin"
 assert_not_contains "$claude_skill_text" "Connect Dev with \$adl-connect <pin>" "Claude Architect skill should not use Codex dollar skill language"
@@ -62,9 +74,9 @@ assert_contains "$claude_skill_text" "newest user feedback first" "Claude Archit
 assert_contains "$claude_connect_skill_text" "Pending Architect's Request: <path>" "Claude Dev connect skill should tell Dev how to handle queued handoffs"
 assert_contains "$claude_connect_skill_text" "## Acceptance Results" "Claude Dev connect skill should require acceptance-shaped reports"
 assert_contains "$claude_clear_skill_text" 'When invoked as `/adl-clear`' "Claude ADL clear skill should document slash invocation"
-assert_contains "$claude_clear_skill_text" '/Users/liadgoren/.claude/skills/adl-clear/scripts/adl-clear "$PWD/.adl"' "Claude ADL clear skill should pass cwd .adl to clear script"
+assert_contains "$claude_clear_skill_text" '{{ADL_SKILLS_DIR}}/adl-clear/scripts/adl-clear "$PWD/.adl"' "Claude ADL clear skill should pass cwd .adl to clear script"
 assert_contains "$claude_clear_skill_text" "not as a project artifact" "Claude ADL clear skill should frame .adl as protocol state"
 assert_contains "$claude_connect_skill_text" "Claude Code" "Claude Dev connect skill should name Claude Code"
-assert_contains "$claude_connect_skill_text" "/Users/liadgoren/.claude/skills/adl/scripts/adl" "Claude Dev connect skill should use Claude CLI path"
+assert_contains "$claude_connect_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Claude Dev connect skill should use install path token"
 assert_contains "$claude_connect_skill_text" "When invoked as \`/adl-connect <pin>\`" "Claude Dev connect skill should use slash invocation language"
 assert_not_contains "$claude_connect_skill_text" 'When invoked as `$adl-connect <pin>`' "Claude Dev connect skill should not use Codex dollar skill language"

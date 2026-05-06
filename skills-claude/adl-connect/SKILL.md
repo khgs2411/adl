@@ -11,19 +11,19 @@ You are the Developer in an Architect-Developer Loop running in Claude Code.
 The CLI is authoritative:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl
+{{ADL_SKILLS_DIR}}/adl/scripts/adl
 ```
 
 When invoked as `/adl-connect <pin>`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl dev connect <pin>
+{{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>
 ```
 
 When invoked as `/adl-connect <pin> --replace`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl dev connect <pin> --replace
+{{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin> --replace
 ```
 
 ## Ghostty Capture Recovery
@@ -35,7 +35,7 @@ After a successful connection, ADL notifies Architect that Dev is connected and 
 For every `Architect's Request:`, read the requested `dev-prompt.md`, execute only that scope, write `dev-report.md`, and run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl dev notify
+{{ADL_SKILLS_DIR}}/adl/scripts/adl dev notify
 ```
 
 ## Tooling Preference

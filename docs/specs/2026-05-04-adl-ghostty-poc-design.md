@@ -63,27 +63,27 @@ These source paths are to be created by the implementation. Until `.install.sh` 
 Install target:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/
+$HOME/.codex/skills/adl/
   SKILL.md
   scripts/
     adl
     ghostty-macos
-/Users/liadgoren/.codex/skills/adl-connect/
+$HOME/.codex/skills/adl-connect/
   SKILL.md
 ```
 
 `.install.sh` copies project files into the install target. The runtime skills invoke the CLI by absolute path:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl
+$HOME/.codex/skills/adl/scripts/adl
 ```
 
 Install safety rules:
 
 - `.install.sh` must be idempotent.
-- `.install.sh` must detect an existing `/Users/liadgoren/.codex/skills/adl/` directory.
+- `.install.sh` must detect an existing `$HOME/.codex/skills/adl/` directory.
 - If the existing directory does not contain an ADL framework marker file, `.install.sh` must back it up before replacing it.
-- Backups are stored outside the target directory under `/Users/liadgoren/.codex/skills/.adl-project-backups/<timestamp>/`.
+- Backups are stored outside the target directory under `$HOME/.codex/skills/.adl-project-backups/<timestamp>/`.
 - The backup must include the full existing `adl` skill directory.
 - `.install.sh` must print the rollback command/path after creating a backup.
 - `.install.sh` must not delete backup directories.
@@ -92,7 +92,7 @@ Install safety rules:
 Framework marker:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/.adl-framework
+$HOME/.codex/skills/adl/.adl-framework
 ```
 
 The marker contains the installed ADL framework version and source project path.
@@ -124,7 +124,7 @@ One active ADL session exists per current working directory.
 `$adl` maps to:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start
+$HOME/.codex/skills/adl/scripts/adl architect start
 ```
 
 Behavior:
@@ -137,7 +137,7 @@ Behavior:
 `$adl new` maps to:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect start --new
+$HOME/.codex/skills/adl/scripts/adl architect start --new
 ```
 
 Behavior:
@@ -150,7 +150,7 @@ Behavior:
 `$adl-connect <pin>` maps to:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev connect <pin>
+$HOME/.codex/skills/adl/scripts/adl dev connect <pin>
 ```
 
 Rules:
@@ -188,7 +188,7 @@ Instead:
 Send command:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
+$HOME/.codex/skills/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
 Rules:
@@ -219,7 +219,7 @@ When done, write:
 .adl/sessions/<session-id>/runs/<run-id>/dev-report.md
 
 Then notify Architect:
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev notify
+$HOME/.codex/skills/adl/scripts/adl dev notify
 ```
 
 Full payloads appear once in files, not duplicated in terminal chat.
@@ -283,7 +283,7 @@ The CLI checks that `dev-report.md` exists before notify. It does not parse repo
 Dev explicitly runs:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl dev notify
+$HOME/.codex/skills/adl/scripts/adl dev notify
 ```
 
 No daemon or poller exists.
@@ -316,7 +316,7 @@ Review against repo state before approving or sending a follow-up.
 V1 includes minimal status:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl status
+$HOME/.codex/skills/adl/scripts/adl status
 ```
 
 It should show:
@@ -399,14 +399,14 @@ macOS permission expectation:
 Two global Codex skills are installed:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/
-/Users/liadgoren/.codex/skills/adl-connect/
+$HOME/.codex/skills/adl/
+$HOME/.codex/skills/adl-connect/
 ```
 
 Both invoke the shared CLI through absolute paths under:
 
 ```text
-/Users/liadgoren/.codex/skills/adl/scripts/adl
+$HOME/.codex/skills/adl/scripts/adl
 ```
 
 The skills are natural-language entrypoints. The CLI is responsible for parsing pins, flags, state transitions, and validation.

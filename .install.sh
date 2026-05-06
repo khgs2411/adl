@@ -84,6 +84,13 @@ replace_version_in_file() {
   "$PERL" -0pi -e 's/VERSION="[0-9]+\.[0-9]+\.[0-9]+"/VERSION="'$version'"/' "$file"
 }
 
+render_skill_template() {
+  local file="$1"
+  local skills_dir="$2"
+
+  ADL_SKILLS_DIR="$skills_dir" "$PERL" -0pi -e 'BEGIN { $skills_dir=$ENV{ADL_SKILLS_DIR}; } s/\{\{ADL_SKILLS_DIR\}\}/$skills_dir/g' "$file"
+}
+
 if [[ "$UPDATE" == "1" ]]; then
   VERSION="$(bumped_version "$BUMP_MODE" "$VERSION")"
   replace_version_in_file "$ROOT/.install.sh" "$VERSION"
@@ -95,7 +102,7 @@ install_runtime() {
   local skills_dir source_skills_dir runtime_label update_hint
 
   if [[ "$runtime" == "claude" ]]; then
-    skills_dir="${ADL_CLAUDE_SKILLS_DIR:-/Users/liadgoren/.claude/skills}"
+    skills_dir="${ADL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
     source_skills_dir="$ROOT/skills-claude"
     runtime_label="ADL Claude framework"
     update_hint="./.install.sh --claude --update"
@@ -103,7 +110,7 @@ install_runtime() {
       update_hint="./.install.sh --update --claude"
     fi
   else
-    skills_dir="${ADL_CODEX_SKILLS_DIR:-/Users/liadgoren/.codex/skills}"
+    skills_dir="${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
     source_skills_dir="$ROOT/skills"
     runtime_label="ADL framework"
     update_hint="./.install.sh --update"
@@ -147,6 +154,9 @@ install_runtime() {
   "$CP" "$source_skills_dir/adl/SKILL.md" "$adl_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-clear/SKILL.md" "$clear_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-connect/SKILL.md" "$connect_target/SKILL.md"
+  render_skill_template "$adl_target/SKILL.md" "$skills_dir"
+  render_skill_template "$clear_target/SKILL.md" "$skills_dir"
+  render_skill_template "$connect_target/SKILL.md" "$skills_dir"
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
   "$CP" "$ROOT/scripts/adl-clear" "$clear_target/scripts/adl-clear"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"

@@ -11,7 +11,7 @@ Clear ADL as local protocol state, not as a project artifact.
 When invoked as `/adl-clear`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl-clear/scripts/adl-clear "$PWD/.adl"
+{{ADL_SKILLS_DIR}}/adl-clear/scripts/adl-clear "$PWD/.adl"
 ```
 
 This removes only the current working directory's `.adl/` directory. Use it when old sessions, pins, active runs, staging files, or transport metadata should not be reused by the next `/adl`.

@@ -11,7 +11,7 @@ You are the Architect in an Architect-Developer Loop running in Claude Code.
 The CLI is authoritative:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl
+{{ADL_SKILLS_DIR}}/adl/scripts/adl
 ```
 
 ADL is a protocol layer for goal-directed work. The goal may come from any upstream operator or agent workflow: a simple chat, a bug report, a screenshot, an exploratory discussion, a spec, an implementation plan, or another planning system. Preserve that workflow instead of replacing it with ADL-specific planning doctrine.
@@ -27,19 +27,19 @@ The Architect owns scope, review, and approval. Treat Developer reports as leads
 When invoked as `/adl`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl architect start
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect start
 ```
 
 When invoked as `/adl new`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl architect start --new
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect start --new
 ```
 
 When invoked as `/adl reconnect`, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl architect reconnect
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect reconnect
 ```
 
 Use reconnect only when Architect transport needs to be refreshed for an existing session. Normal `/adl` resume does not recapture transport.
@@ -63,7 +63,7 @@ Every Dev prompt must include:
 3. Before the first handoff in a session, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl status
+{{ADL_SKILLS_DIR}}/adl/scripts/adl status
 ```
 
 If Dev is not connected, tell the user with the actual pin from `adl status`:
@@ -80,7 +80,7 @@ Do not create the first run until Dev is connected, unless the user explicitly a
 7. Run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl architect send-dev --prompt-file <path>
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
 8. Tell the user only a short status such as `Passing this to the developer...`.
@@ -92,7 +92,7 @@ If `send-dev` reports `Failed to wake Dev`, do not recreate the prompt from memo
 Architect start and reconnect also capture the focused Ghostty pane. If capture fails in Claude Code with an automation, `osascript`, Ghostty, or connection error, rerun the same CLI command after granting local automation access. If it still fails, run:
 
 ```text
-/Users/liadgoren/.claude/skills/adl/scripts/adl doctor ghostty architect
+{{ADL_SKILLS_DIR}}/adl/scripts/adl doctor ghostty architect
 ```
 
 Then grant macOS Automation permission for `osascript` to control Ghostty if the doctor output asks for it.
