@@ -2,7 +2,7 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.4.5"
+VERSION="0.4.6"
 SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
