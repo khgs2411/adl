@@ -2,30 +2,32 @@
 set -euo pipefail
 
 ROOT="${0:A:h}"
-VERSION="0.4.8"
-UPDATE=0
+VERSION_FILE="$ROOT/VERSION"
+[[ -f "$VERSION_FILE" ]] || {
+  print -r -- "Missing required source file: $VERSION_FILE" >&2
+  exit 4
+}
+VERSION="$(/bin/cat "$VERSION_FILE")"
 TARGET_RUNTIME="all"
-BUMP_MODE="patch"
-BUMP_MODE_SET=0
+BUMP_MODE=""
 
 usage() {
-  print -r -- "Usage: .install.sh [--update] [--minor|--major] [--codex|--claude]" >&2
+  print -r -- "Usage: .install.sh [--update] [--patch|--minor|--major] [--codex|--claude]" >&2
 }
 
 set_bump_mode() {
   local mode="$1"
-  if [[ "$BUMP_MODE_SET" == "1" ]]; then
+  if [[ -n "$BUMP_MODE" ]]; then
     usage
     exit 2
   fi
   BUMP_MODE="$mode"
-  BUMP_MODE_SET=1
-  UPDATE=1
 }
 
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
-    --update) UPDATE=1 ;;
+    --update) ;;
+    --patch) set_bump_mode patch ;;
     --minor) set_bump_mode minor ;;
     --major) set_bump_mode major ;;
     --codex) TARGET_RUNTIME="codex" ;;
@@ -77,13 +79,6 @@ bumped_version() {
   print -r -- "$major.$minor.$patch"
 }
 
-replace_version_in_file() {
-  local file="$1"
-  local version="$2"
-
-  "$PERL" -0pi -e 's/VERSION="[0-9]+\.[0-9]+\.[0-9]+"/VERSION="'$version'"/' "$file"
-}
-
 render_skill_template() {
   local file="$1"
   local skills_dir="$2"
@@ -91,32 +86,24 @@ render_skill_template() {
   ADL_SKILLS_DIR="$skills_dir" "$PERL" -0pi -e 'BEGIN { $skills_dir=$ENV{ADL_SKILLS_DIR}; } s/\{\{ADL_SKILLS_DIR\}\}/$skills_dir/g' "$file"
 }
 
-if [[ "$UPDATE" == "1" ]]; then
+if [[ -n "$BUMP_MODE" ]]; then
   VERSION="$(bumped_version "$BUMP_MODE" "$VERSION")"
-  replace_version_in_file "$ROOT/.install.sh" "$VERSION"
-  replace_version_in_file "$ROOT/scripts/adl" "$VERSION"
+  print -r -- "$VERSION" > "$VERSION_FILE"
+  print -r -- "Bumped ADL product version to $VERSION."
 fi
 
 install_runtime() {
   local runtime="$1"
-  local skills_dir source_skills_dir runtime_label update_hint
+  local skills_dir source_skills_dir runtime_label
 
   if [[ "$runtime" == "claude" ]]; then
     skills_dir="${ADL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}"
     source_skills_dir="$ROOT/skills-claude"
     runtime_label="ADL Claude framework"
-    update_hint="./.install.sh --claude --update"
-    if [[ "$TARGET_RUNTIME" == "all" ]]; then
-      update_hint="./.install.sh --update --claude"
-    fi
   else
     skills_dir="${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
     source_skills_dir="$ROOT/skills"
     runtime_label="ADL framework"
-    update_hint="./.install.sh --update"
-    if [[ "$TARGET_RUNTIME" == "all" ]]; then
-      update_hint="./.install.sh --update --codex"
-    fi
   fi
 
   local adl_target="$skills_dir/adl"
@@ -141,12 +128,6 @@ install_runtime() {
     print -r -- "Rollback: \"$RM\" -rf '$adl_target' && \"$CP\" -R '$backup' '$adl_target'"
   fi
 
-  if [[ -f "$marker" && "$UPDATE" != "1" ]]; then
-    print -r -- "$runtime_label already installed at $adl_target"
-    print -r -- "Run $update_hint to replace it with version $VERSION."
-    return 0
-  fi
-
   "$RM" -rf "$adl_target" "$skills_dir/adl-clear" "$reset_target" "$connect_target"
   "$MKDIR" -p "$adl_target/scripts" "$connect_target"
   "$MKDIR" -p "$reset_target/scripts"
@@ -158,6 +139,7 @@ install_runtime() {
   render_skill_template "$reset_target/SKILL.md" "$skills_dir"
   render_skill_template "$connect_target/SKILL.md" "$skills_dir"
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
+  "$CP" "$ROOT/VERSION" "$adl_target/VERSION"
   "$CP" "$ROOT/scripts/adl-reset" "$reset_target/scripts/adl-reset"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
   "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"

@@ -2,10 +2,10 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.4.8"
 SCRIPT_PATH="${0:A}"
-SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
-GHOSTTY="$SCRIPT_DIR/ghostty-macos"
+SCRIPT_DIR="${SCRIPT_PATH:h}"
+ADAPTER_DIR="${ADL_SCRIPT_ROOT:-$SCRIPT_DIR}"
+GHOSTTY="$ADAPTER_DIR/ghostty-macos"
 SKILLS_DIR="${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}"
 GLOBAL_MARKER="$SKILLS_DIR/adl/.adl-framework"
 ADL_DIR=".adl"
@@ -14,6 +14,8 @@ STAGING_DIR="$ADL_DIR/staging"
 ACTIVE_FILE="$ADL_DIR/active-session"
 DATE="/bin/date"
 CAT="/bin/cat"
+VERSION_FILE="$SCRIPT_DIR/../VERSION"
+VERSION="$("$CAT" "$VERSION_FILE" 2>/dev/null || print -r -- "0.0.0-dev")"
 CP="/bin/cp"
 MKDIR="/bin/mkdir"
 MV="/bin/mv"

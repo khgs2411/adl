@@ -16,13 +16,14 @@ Runtime state is created per working directory in `.adl/`; never commit it.
 ## Build, Test, and Development Commands
 
 - `./tests/run.sh` runs every `tests/*_test.sh` script.
-- `./.install.sh` installs the current ADL skills and scripts for Codex and Claude Code.
-- `./.install.sh --update` bumps the patch version, updates source version markers, and reinstalls.
+- `./.install.sh` installs or reinstalls the current ADL skills and scripts for Codex and Claude Code.
+- `./.install.sh --update` is a compatibility alias for reinstalling the current ADL version without bumping the product version.
+- `./.install.sh --patch|--minor|--major` bumps the root `VERSION` file and reinstalls.
 - `./.install.sh --codex --update` updates only the Codex runtime.
 - `./.install.sh --claude --update` updates only the Claude Code runtime.
 - `adl doctor` checks local `.adl/` state and installed framework metadata.
 
-Use `rtk` wrappers where available, for example `rtk read README.md` or `rtk rg VERSION`.
+Use `rtk` wrappers where available, for example `rtk read README.md` or `rtk rg VERSION`. Treat `VERSION` as release-owned; it is protected by `.github/CODEOWNERS`.
 
 ## Coding Style & Naming Conventions
 

@@ -53,7 +53,7 @@ The working directory owns the runtime state. Each repository gets its own `.adl
 
 ## Install
 
-Install or update both Codex and Claude Code skills:
+Install or reinstall both Codex and Claude Code skills:
 
 ```sh
 ./.install.sh
@@ -69,13 +69,6 @@ ADL_CODEX_SKILLS_DIR=/path/to/codex/skills ./.install.sh --codex
 ADL_CLAUDE_SKILLS_DIR=/path/to/claude/skills ./.install.sh --claude
 ```
 
-Select the version bump during update:
-
-```sh
-./.install.sh --update --minor
-./.install.sh --update --major
-```
-
 Limit installation to one runtime:
 
 ```sh
@@ -83,53 +76,80 @@ Limit installation to one runtime:
 ./.install.sh --claude --update
 ```
 
-Every update bumps the project version first. `--update` bumps patch by default.
+Plain `./.install.sh` is the normal reinstall path. `--update` is accepted as a compatibility alias and also only reinstalls the current ADL version. Product versioning is separate and uses the root `VERSION` file.
+
+Release maintainers can explicitly bump the product version and reinstall in one step:
+
+```sh
+./.install.sh --patch
+./.install.sh --minor
+./.install.sh --major
+```
+
+The `VERSION` file is protected by `.github/CODEOWNERS`; configure branch protection to require Code Owner review so version bumps cannot merge without maintainer approval.
 
 ## Use
 
-In Codex, invoke the installed Architect skill from the repository you want ADL to manage:
+Invoke the installed Architect skill from the repository you want ADL to manage.
+
+| Intent | Codex | Claude Code | CLI |
+| --- | --- | --- | --- |
+| Start a fresh Architect session | `$adl` | `/adl` | `adl architect start` |
+| Resume existing Architect session state | `$adl resume` | `/adl resume` | `adl architect resume` |
+| Set this pane as Architect for the active session | `$adl refresh` | `/adl refresh` | `adl architect refresh` |
+| Reset local ADL state | `$adl-reset` | `/adl-reset` | `adl-reset "$PWD/.adl"` |
+
+Plain `$adl` starts fresh on purpose. Use resume only when you explicitly want to reuse the existing `.adl/` session, active run, reports, and pin.
+
+### Architect
 
 ```text
 $adl
 ```
 
-In Claude Code, invoke the corresponding skill:
-
 ```text
 /adl
 ```
 
-The skill runs the installed `adl` CLI. You can also run that CLI directly if its install directory is on your path.
-
-Start a fresh Architect session:
+If you need the raw CLI:
 
 ```sh
 adl architect start
-```
-
-Resume an existing Architect session only when you mean to reuse its state:
-
-```sh
 adl architect resume
-```
-
-Refresh the current pane as Architect for the active session:
-
-```sh
 adl architect refresh
 ```
 
-Connect the Developer pane with the printed pin. Codex uses `$adl-connect`; Claude Code uses `/adl-connect`.
+`resume` means state continuity. `refresh` means transport repair: keep the session, but recapture the current pane as Architect.
 
-```sh
-adl-connect <pin>
+### Developer
+
+Connect the Developer pane with the printed pin:
+
+```text
+$adl-connect <pin>
+/adl-connect <pin>
 ```
 
-If the previous Developer pane should be replaced:
+If you need the raw CLI:
 
 ```sh
-adl-connect <pin> --replace
+adl dev connect <pin>
 ```
+
+If the previous Developer pane should be replaced, Dev takes the Dev slot for the existing session:
+
+```text
+$adl-connect <pin> --replace
+/adl-connect <pin> --replace
+```
+
+Raw CLI:
+
+```sh
+adl dev connect <pin> --replace
+```
+
+### Diagnostics
 
 Check local state and installed runtime metadata:
 
@@ -139,13 +159,13 @@ adl doctor ghostty architect
 adl doctor ghostty dev
 ```
 
-Clear stale protocol state for the current working directory:
+Reset stale protocol state for the current working directory:
 
 ```sh
-adl-reset
+adl-reset "$PWD/.adl"
 ```
 
-`adl doctor` is read-only. `adl-reset` removes the local `.adl/` directory so the next `adl` starts clean.
+`adl doctor` is read-only. `adl-reset` removes only the current working directory's `.adl/` directory so the next `$adl` starts clean.
 
 ## Repository Layout
 

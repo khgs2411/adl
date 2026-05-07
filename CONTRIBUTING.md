@@ -23,13 +23,18 @@ Install local runtime updates when you need to verify skill or CLI behavior:
 
 ```sh
 ./.install.sh
-```
-
-Use update mode only when the change is intended to bump the installed framework version:
-
-```sh
 ./.install.sh --update
 ```
+
+Do not bump the ADL product version as part of routine local installation. Versioning is a release action owned through the root `VERSION` file.
+
+```sh
+./.install.sh --patch
+./.install.sh --minor
+./.install.sh --major
+```
+
+`VERSION` is listed in `.github/CODEOWNERS`; pull requests that change it should be release PRs and require maintainer review.
 
 ## Change Guidelines
 

@@ -12,7 +12,7 @@ WORKDIR="$PWD"
 export ADL_GHOSTTY_DRY_RUN=1
 export ADL_SCRIPT_ROOT="$ROOT/scripts"
 export ADL_CODEX_SKILLS_DIR="$TMP/skills"
-expected_cli_version="$(grep '^VERSION=' "$ROOT/scripts/adl" | sed 's/VERSION="//;s/"//')"
+expected_cli_version="$(cat "$ROOT/VERSION")"
 
 mkdir -p "$ADL_CODEX_SKILLS_DIR/adl"
 /bin/cat > "$ADL_CODEX_SKILLS_DIR/adl/.adl-framework" <<MARKER
