@@ -62,8 +62,8 @@ assert_contains "$active_doctor" "transport.dev: present (ghostty-macos)" "docto
 awk "{ if (\$0 ~ /^ADL_ARCHITECT_TERMINAL_ID=/) print \"ADL_ARCHITECT_TERMINAL_ID='dry-run-dev-terminal'\"; else print }" ".adl/sessions/$session_id/session.env" > ".adl/sessions/$session_id/session.env.tmp"
 mv ".adl/sessions/$session_id/session.env.tmp" ".adl/sessions/$session_id/session.env"
 collision_doctor="$("$ROOT/scripts/adl" doctor)"
-assert_contains "$collision_doctor" "transport.warning: architect and dev terminal ids match; run \$adl reconnect in the Architect pane" "doctor should point collision recovery at reconnect"
-assert_contains "$collision_doctor" "next: run \$adl reconnect in Architect pane" "doctor should print reconnect next step for colliding transport"
+assert_contains "$collision_doctor" "transport.warning: architect and dev terminal ids match; run \$adl refresh in the Architect pane" "doctor should point collision recovery at refresh"
+assert_contains "$collision_doctor" "next: run \$adl refresh in Architect pane" "doctor should print refresh next step for colliding transport"
 
 ghostty_arch="$("$ROOT/scripts/adl" doctor ghostty architect)"
 assert_contains "$ghostty_arch" "ADL doctor ghostty" "ghostty doctor should print heading"

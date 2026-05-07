@@ -4,7 +4,7 @@
 
 This repository contains the ADL shell protocol for coordinating Architect and Developer AI sessions.
 
-- `scripts/` holds executable shell scripts: `adl`, `adl-clear`, and `ghostty-macos`.
+- `scripts/` holds executable shell scripts: `adl`, `adl-reset`, and `ghostty-macos`.
 - `skills/` contains Codex skill definitions installed into `~/.codex/skills`.
 - `skills-claude/` contains Claude Code skill definitions installed into `~/.claude/skills`.
 - `tests/` contains zsh integration and behavior tests. Shared helpers live in `tests/assert.sh`.
@@ -33,7 +33,7 @@ Scripts are written for `zsh` and should start with:
 set -euo pipefail
 ```
 
-Prefer small shell functions, uppercase constants such as `VERSION`, and kebab-case executable names such as `adl-clear`. Keep comments minimal. Avoid broad structural rewrites unless the protocol contract changes.
+Prefer small shell functions, uppercase constants such as `VERSION`, and kebab-case executable names such as `adl-reset`. Keep comments minimal. Avoid broad structural rewrites unless the protocol contract changes.
 
 ## Testing Guidelines
 

@@ -42,7 +42,7 @@ The Ghostty/macOS dependency is a transport limitation, not a product boundary. 
 ## How The Loop Works
 
 ```text
-Architect starts or resumes ADL.
+Architect starts fresh ADL sessions, explicitly resumes existing sessions, or refreshes the Architect pane.
 Dev connects with the printed pin.
 Architect sends a scoped prompt with goal, slice, acceptance criteria, and expected evidence.
 Dev implements only that scope and writes a compact report.
@@ -101,10 +101,22 @@ In Claude Code, invoke the corresponding skill:
 
 The skill runs the installed `adl` CLI. You can also run that CLI directly if its install directory is on your path.
 
-Start or resume an Architect session:
+Start a fresh Architect session:
 
 ```sh
-adl
+adl architect start
+```
+
+Resume an existing Architect session only when you mean to reuse its state:
+
+```sh
+adl architect resume
+```
+
+Refresh the current pane as Architect for the active session:
+
+```sh
+adl architect refresh
 ```
 
 Connect the Developer pane with the printed pin. Codex uses `$adl-connect`; Claude Code uses `/adl-connect`.
@@ -130,10 +142,10 @@ adl doctor ghostty dev
 Clear stale protocol state for the current working directory:
 
 ```sh
-adl-clear
+adl-reset
 ```
 
-`adl doctor` is read-only. `adl-clear` removes the local `.adl/` directory so the next `adl` starts clean.
+`adl doctor` is read-only. `adl-reset` removes the local `.adl/` directory so the next `adl` starts clean.
 
 ## Repository Layout
 

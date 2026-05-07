@@ -67,13 +67,22 @@ pin="$(grep "^ADL_PIN=" ".adl/sessions/$session_id/session.env" | sed "s/ADL_PIN
 awk "{ if (\$0 ~ /^ADL_ARCHITECT_TERMINAL_ID=/) print \"ADL_ARCHITECT_TERMINAL_ID='stale-architect-terminal'\"; else print }" ".adl/sessions/$session_id/session.env" > ".adl/sessions/$session_id/session.env.tmp"
 mv ".adl/sessions/$session_id/session.env.tmp" ".adl/sessions/$session_id/session.env"
 again="$("$ROOT/scripts/adl" architect start)"
-assert_contains "$again" "Resumed ADL session" "second start should resume"
-assert_eq "$session_id" "$(cat .adl/active-session)" "active session should be reused"
+assert_contains "$again" "ADL session ready" "second start should create a fresh session"
+assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_STATUS='closed'" "second start should close previous active session"
+assert_not_contains "$(cat .adl/active-session)" "$session_id" "active session should move to fresh session"
+
+session_id="$(cat .adl/active-session)"
+pin="$(grep "^ADL_PIN=" ".adl/sessions/$session_id/session.env" | sed "s/ADL_PIN='//;s/'$//")"
+awk "{ if (\$0 ~ /^ADL_ARCHITECT_TERMINAL_ID=/) print \"ADL_ARCHITECT_TERMINAL_ID='stale-architect-terminal'\"; else print }" ".adl/sessions/$session_id/session.env" > ".adl/sessions/$session_id/session.env.tmp"
+mv ".adl/sessions/$session_id/session.env.tmp" ".adl/sessions/$session_id/session.env"
+resume="$("$ROOT/scripts/adl" architect resume)"
+assert_contains "$resume" "Resumed ADL session" "architect resume should report resumed session"
+assert_eq "$session_id" "$(cat .adl/active-session)" "architect resume should reuse active session"
 assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_ARCHITECT_TERMINAL_ID='stale-architect-terminal'" "architect resume should preserve existing transport"
 
-reconnect="$("$ROOT/scripts/adl" architect reconnect)"
-assert_contains "$reconnect" "Reconnected Architect transport" "architect reconnect should report refreshed transport"
-assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-terminal'" "architect reconnect should refresh adapter capture output"
+refresh="$("$ROOT/scripts/adl" architect refresh)"
+assert_contains "$refresh" "Refreshed Architect transport" "architect refresh should report refreshed transport"
+assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-terminal'" "architect refresh should refresh adapter capture output"
 
 mkdir -p .adl/staging
 print -r -- "Implement task A" > .adl/staging/bad-prompt.md
@@ -103,13 +112,13 @@ assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_DEV_TERMIN
 assert_contains "$(cat .adl/adl.log)" "event=dev.connect_notify" "dev connect should log architect wake"
 
 set +e
-bad_arch_reconnect="$(ADL_GHOSTTY_DRY_RUN_TERMINAL_ID=dry-run-dev-terminal "$ROOT/scripts/adl" architect reconnect 2>&1)"
-bad_arch_reconnect_code="$?"
+bad_arch_refresh="$(ADL_GHOSTTY_DRY_RUN_TERMINAL_ID=dry-run-dev-terminal "$ROOT/scripts/adl" architect refresh 2>&1)"
+bad_arch_refresh_code="$?"
 set -e
-assert_eq "3" "$bad_arch_reconnect_code" "architect reconnect should reject capture collision with dev"
-assert_contains "$bad_arch_reconnect" "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun \$adl reconnect." "architect reconnect collision should explain focused pane issue"
-assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-terminal'" "failed architect reconnect should not overwrite architect transport"
-assert_contains "$(cat .adl/adl.log)" "event=architect.reconnect refused_collision" "architect reconnect collision should write log entry"
+assert_eq "3" "$bad_arch_refresh_code" "architect refresh should reject capture collision with dev"
+assert_contains "$bad_arch_refresh" "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun \$adl refresh." "architect refresh collision should explain focused pane issue"
+assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-terminal'" "failed architect refresh should not overwrite architect transport"
+assert_contains "$(cat .adl/adl.log)" "event=architect.refresh refused_collision" "architect refresh collision should write log entry"
 
 set +e
 notify_missing="$("$ROOT/scripts/adl" dev notify 2>&1)"
@@ -138,7 +147,7 @@ self_notify="$("$ROOT/scripts/adl" dev notify 2>&1)"
 self_notify_code="$?"
 set -e
 assert_eq "3" "$self_notify_code" "notify should reject architect/dev transport collision"
-assert_contains "$self_notify" "Architect transport is missing or invalid. Ask Architect to run \$adl reconnect, then retry notify." "notify collision should ask Dev to request Architect reconnect"
+assert_contains "$self_notify" "Architect transport is missing or invalid. Ask Architect to run \$adl refresh, then retry notify." "notify collision should ask Dev to request Architect refresh"
 assert_contains "$(cat ".adl/sessions/$session_id/runs/001/run.env")" "ADL_RUN_STATUS='pending_dev_connection'" "failed notify should not mark run reported"
 awk "{ if (\$0 ~ /^ADL_ARCHITECT_TERMINAL_ID=/) print \"ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-terminal'\"; else print }" ".adl/sessions/$session_id/session.env" > ".adl/sessions/$session_id/session.env.tmp"
 mv ".adl/sessions/$session_id/session.env.tmp" ".adl/sessions/$session_id/session.env"
@@ -164,7 +173,7 @@ failed_send="$(ADL_SCRIPT_ROOT="$FAILING_ADAPTER_DIR" "$ROOT/scripts/adl" dev no
 failed_send_code="$?"
 set -e
 assert_eq "3" "$failed_send_code" "notify should fail when Ghostty send fails"
-assert_contains "$failed_send" "Failed to wake Architect" "notify send failure should explain reconnect path"
+assert_contains "$failed_send" "Failed to wake Architect" "notify send failure should explain refresh path"
 assert_contains "$(cat ".adl/sessions/$session_id/runs/001/run.env")" "ADL_RUN_STATUS='pending_dev_connection'" "failed send should not mark run reported"
 
 notify="$("$ROOT/scripts/adl" dev notify)"
@@ -202,7 +211,7 @@ failed_connect_notify="$(ADL_SCRIPT_ROOT="$CONNECT_FAIL_ADAPTER_DIR" "$ROOT/scri
 failed_connect_notify_code="$?"
 set -e
 assert_eq "3" "$failed_connect_notify_code" "dev connect should fail when architect wake fails"
-assert_contains "$failed_connect_notify" "Failed to notify Architect that Dev connected. Ask Architect to run \$adl reconnect, then retry \$adl-connect with --replace." "connect wake failure should explain recovery"
+assert_contains "$failed_connect_notify" "Failed to notify Architect that Dev connected. Ask Architect to run \$adl refresh, then retry \$adl-connect with --replace." "connect wake failure should explain recovery"
 assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "failed connect wake should still store dev metadata"
 
 mkdir -p .adl/staging

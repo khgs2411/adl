@@ -45,7 +45,7 @@ tell application "Ghostty"
   return («property ID  » of focusedTerminal as text)
 end tell
 APPLESCRIPT
-)" || die_transport "Ghostty capture failed. Grant automation permission for osascript to control Ghostty, then reconnect."
+)" || die_transport "Ghostty capture failed. Grant automation permission for osascript to control Ghostty, then refresh."
     [[ -n "$term_id" ]] || die_transport "Ghostty capture returned an empty terminal id"
     role_upper="${role:u}"
     print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"

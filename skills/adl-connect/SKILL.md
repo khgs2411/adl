@@ -1,6 +1,6 @@
 ---
 name: adl-connect
-description: Invoke as adl-connect for the Developer side of the Architect-Developer Loop. Use with a pin from the Architect to connect or reconnect this Codex session as Dev.
+description: Invoke as adl-connect for the Developer side of the Architect-Developer Loop. Use with a pin from the Architect to connect this Codex session as Dev, or with --replace to take the Dev slot for an existing session.
 ---
 
 # ADL Dev Connect

@@ -1,6 +1,6 @@
 ---
 name: adl
-description: Invoke as adl for the Architect side of the Architect-Developer Loop. Use when starting or resuming an ADL session, sending scoped work to Dev, reviewing Dev reports, or passing follow-up work back to Dev.
+description: Invoke as adl for the Architect side of the Architect-Developer Loop. Use when starting a fresh ADL session, explicitly resuming an existing session, refreshing the Architect pane, sending scoped work to Dev, reviewing Dev reports, or passing follow-up work back to Dev.
 allowed-tools: Bash, Read, Grep, Glob
 ---
 
@@ -22,7 +22,7 @@ Review is not approval of code activity. Approval means the implemented slice sa
 
 The Architect owns scope, review, and approval. Treat Developer reports as leads, not proof. Before approving work, verify repo state, diffs, files, focused checks, acceptance criteria, and goal alignment directly.
 
-## Start Or Resume
+## Start, Resume, Or Refresh
 
 When invoked as `/adl`, run:
 
@@ -30,19 +30,19 @@ When invoked as `/adl`, run:
 {{ADL_SKILLS_DIR}}/adl/scripts/adl architect start
 ```
 
-When invoked as `/adl new`, run:
+When invoked as `/adl resume`, run:
 
 ```text
-{{ADL_SKILLS_DIR}}/adl/scripts/adl architect start --new
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect resume
 ```
 
-When invoked as `/adl reconnect`, run:
+When invoked as `/adl refresh`, run:
 
 ```text
-{{ADL_SKILLS_DIR}}/adl/scripts/adl architect reconnect
+{{ADL_SKILLS_DIR}}/adl/scripts/adl architect refresh
 ```
 
-Use reconnect only when Architect transport needs to be refreshed for an existing session. Normal `/adl` resume does not recapture transport.
+Use `/adl` for a fresh Architect session. Use `/adl resume` only when the user explicitly wants to continue an existing ADL session as Architect. Use `/adl refresh` only to set the current pane as the Architect pane for the active session.
 
 ## Send Work To Dev
 
@@ -85,11 +85,11 @@ Do not create the first run until Dev is connected, unless the user explicitly a
 
 8. Tell the user only a short status such as `Passing this to the developer...`.
 
-If `send-dev` reports `Failed to wake Dev`, do not recreate the prompt from memory. Run `adl status`, use the active run's copied `dev-prompt.md` as the source of truth, reconnect Dev, then either wake the existing active run or send a new prompt that explicitly supersedes the failed run.
+If `send-dev` reports `Failed to wake Dev`, do not recreate the prompt from memory. Run `adl status`, use the active run's copied `dev-prompt.md` as the source of truth, ask Dev to rerun `/adl-connect <pin> --replace`, then either wake the existing active run or send a new prompt that explicitly supersedes the failed run.
 
 ## Ghostty Capture Recovery
 
-Architect start and reconnect also capture the focused Ghostty pane. If capture fails in Claude Code with an automation, `osascript`, Ghostty, or connection error, rerun the same CLI command after granting local automation access. If it still fails, run:
+Architect start and refresh capture the focused Ghostty pane. If capture fails in Claude Code with an automation, `osascript`, Ghostty, or connection error, rerun the same CLI command after granting local automation access. If it still fails, run:
 
 ```text
 {{ADL_SKILLS_DIR}}/adl/scripts/adl doctor ghostty architect

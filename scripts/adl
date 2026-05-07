@@ -2,7 +2,7 @@
 set -euo pipefail
 setopt EXTENDED_GLOB
 
-VERSION="0.4.7"
+VERSION="0.4.8"
 SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${ADL_SCRIPT_ROOT:-${SCRIPT_PATH:h}}"
 GHOSTTY="$SCRIPT_DIR/ghostty-macos"
@@ -264,29 +264,33 @@ create_session() {
 }
 
 start_architect() {
-  local sid sf p arch_term
-  if [[ "${1:-}" == "--new" ]]; then
-    if sid="$(active_session 2>/dev/null)"; then
-      sf="$(session_file "$sid")"
-      [[ -f "$sf" ]] && env_set "$sf" ADL_STATUS closed && log_event "architect.start closed_previous_session=$sid"
-    fi
-    create_session
-    return
+  local sid sf
+  [[ -z "${1:-}" || "${1:-}" == "--new" ]] || die "Usage: adl architect start"
+  "$MKDIR" -p "$ADL_DIR"
+  if sid="$(active_session 2>/dev/null)" && [[ -f "$(session_file "$sid")" ]]; then
+    sf="$(session_file "$sid")"
+    env_set "$sf" ADL_STATUS closed
+    log_event "architect.start closed_previous_session=$sid"
   fi
+  create_session
+}
+
+resume_architect() {
+  local sid sf p arch_term
   "$MKDIR" -p "$ADL_DIR"
   if sid="$(active_session 2>/dev/null)" && [[ -f "$(session_file "$sid")" ]]; then
     sf="$(session_file "$sid")"
     arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
     p="$(env_get "$sf" ADL_PIN)"
-    log_event "architect.start mode=resume session=$sid pin=$p architect_terminal=${arch_term:-absent}"
+    log_event "architect.resume session=$sid pin=$p architect_terminal=${arch_term:-absent}"
     print -r -- "Resumed ADL session."
     print -r -- "Pin: $p"
     return
   fi
-  create_session
+  die "No active ADL session to resume. Invoke $(skill_invocation adl) to start a fresh session."
 }
 
-reconnect_architect() {
+refresh_architect() {
   local sid sf p capture arch_term dev_term
   sid="$(require_active_session)"
   sf="$(session_file "$sid")"
@@ -295,13 +299,13 @@ reconnect_architect() {
   arch_term="$(capture_value "$capture" ADL_ARCHITECT_TERMINAL_ID)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
   if [[ -n "$dev_term" && "$arch_term" == "$dev_term" ]]; then
-    log_event "architect.reconnect refused_collision session=$sid pin=$p architect_terminal=$arch_term dev_terminal=$dev_term"
-    die_transport "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun $(skill_invocation adl) reconnect."
+    log_event "architect.refresh refused_collision session=$sid pin=$p architect_terminal=$arch_term dev_terminal=$dev_term"
+    die_transport "Captured Architect transport matches Dev transport. Focus the Architect Ghostty pane and rerun $(skill_invocation adl) refresh."
   fi
   env_set "$sf" ADL_ARCHITECT_ADAPTER ghostty-macos
   env_set "$sf" ADL_ARCHITECT_TERMINAL_ID "$arch_term"
-  log_event "architect.reconnect session=$sid pin=$p architect_terminal=$arch_term dev_terminal=${dev_term:-absent}"
-  print -r -- "Reconnected Architect transport."
+  log_event "architect.refresh session=$sid pin=$p architect_terminal=$arch_term dev_terminal=${dev_term:-absent}"
+  print -r -- "Refreshed Architect transport."
   print -r -- "Pin: $p"
 }
 
@@ -493,7 +497,7 @@ notify_architect_dev_connected() {
   local sf arch_term active active_status active_env message
   sf="$(session_file "$sid")"
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
-  [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
+  [[ -n "$arch_term" && "$arch_term" != "$dev_term" ]] || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) refresh, then retry $(skill_invocation adl-connect) with --replace."
   active="$(env_get "$sf" ADL_ACTIVE_RUN || true)"
   active_status=""
   if [[ -n "$active" ]]; then
@@ -506,7 +510,7 @@ notify_architect_dev_connected() {
       message="Dev connected and ready. Pending run $active exists; Dev should execute the pending prompt."
       ;;
   esac
-  "$GHOSTTY" send "$arch_term" "$message" >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) reconnect, then retry $(skill_invocation adl-connect) with --replace."
+  "$GHOSTTY" send "$arch_term" "$message" >/dev/null || die_transport "Failed to notify Architect that Dev connected. Ask Architect to run $(skill_invocation adl) refresh, then retry $(skill_invocation adl-connect) with --replace."
   log_event "dev.connect_notify session=$sid architect_terminal=$arch_term dev_terminal=$dev_term"
 }
 
@@ -529,9 +533,9 @@ notify_dev() {
   validate_dev_report "$report"
   arch_term="$(env_get "$sf" ADL_ARCHITECT_TERMINAL_ID || true)"
   dev_term="$(env_get "$sf" ADL_DEV_TERMINAL_ID || true)"
-  [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
-  [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) reconnect, then retry notify."
-  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against the goal, approved context, acceptance criteria, and repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Reconnect Architect by running $(skill_invocation adl) reconnect."
+  [[ -n "$arch_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) refresh, then retry notify."
+  [[ -z "$dev_term" || "$arch_term" != "$dev_term" ]] || die_transport "Architect transport is missing or invalid. Ask Architect to run $(skill_invocation adl) refresh, then retry notify."
+  "$GHOSTTY" send "$arch_term" "Developer's Report: read $report. Review against the goal, approved context, acceptance criteria, and repo state before approving or sending a follow-up." >/dev/null || die_transport "Failed to wake Architect. Refresh Architect by running $(skill_invocation adl) refresh."
   env_set "$rdir/run.env" ADL_RUN_STATUS reported
   env_set "$rdir/run.env" ADL_REPORTED_AT "$(now_ts)"
   env_set "$sf" ADL_STATUS reported
@@ -684,8 +688,8 @@ doctor_cmd() {
   print -r -- "run.status: $(present_or_absent "$run_status")"
   [[ -n "$architect_adapter" && -n "$architect_terminal" ]] && print -r -- "transport.architect: present ($architect_adapter)" || print -r -- "transport.architect: missing"
   [[ -n "$dev_adapter" && -n "$dev_terminal" ]] && print -r -- "transport.dev: present ($dev_adapter)" || print -r -- "transport.dev: missing"
-  [[ -n "$architect_terminal" && "$architect_terminal" == "$dev_terminal" ]] && print -r -- "transport.warning: architect and dev terminal ids match; run $(skill_invocation adl) reconnect in the Architect pane"
-  [[ -z "$architect_terminal" || ( -n "$dev_terminal" && "$architect_terminal" == "$dev_terminal" ) ]] && print -r -- "next: run $(skill_invocation adl) reconnect in Architect pane"
+  [[ -n "$architect_terminal" && "$architect_terminal" == "$dev_terminal" ]] && print -r -- "transport.warning: architect and dev terminal ids match; run $(skill_invocation adl) refresh in the Architect pane"
+  [[ -z "$architect_terminal" || ( -n "$dev_terminal" && "$architect_terminal" == "$dev_terminal" ) ]] && print -r -- "next: run $(skill_invocation adl) refresh in Architect pane"
   if [[ -f "$GLOBAL_MARKER" ]]; then
     print -r -- "global.marker: present ($GLOBAL_MARKER)"
     print -r -- "global.version: $(present_or_absent "$marker_version")"
@@ -733,10 +737,12 @@ case "${1:-}" in
     shift
     case "${1:-}" in
       start) shift; start_architect "${1:-}" ;;
-      reconnect) shift; reconnect_architect ;;
+      resume) shift; resume_architect ;;
+      refresh) shift; refresh_architect ;;
+      reconnect) shift; print -r -- "architect reconnect is deprecated; use architect refresh." >&2; refresh_architect ;;
       send-dev) shift; send_dev "$@" ;;
       review) shift; review_run "$@" ;;
-      *) die "Usage: adl architect start [--new] | reconnect | send-dev --prompt-file <path> | review --verdict <verdict> --review-file <path>" ;;
+      *) die "Usage: adl architect start | resume | refresh | send-dev --prompt-file <path> | review --verdict <verdict> --review-file <path>" ;;
     esac
     ;;
   dev)
