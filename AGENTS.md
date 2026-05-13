@@ -49,3 +49,5 @@ Pull requests should include intent, changed protocol surface, test evidence, an
 ## Agent-Specific Instructions
 
 Respect the core invariant from `README.md`: skills are intent, CLI is authority, `.adl` is truth, and Ghostty is transport. Architect approval is a human review verdict; tests and Dev reports are evidence, not approval.
+
+Runtime skills under `~/.codex/skills` and `~/.claude/skills` are installed outputs. Do not edit them directly. Change the source skill templates under `skills/` or `skills-claude/`, then run `.install.sh` with the appropriate target flag.

@@ -2,17 +2,19 @@
 set -euo pipefail
 
 cmd="${1:-}"
+LOG_FILE=".adl/adl.log"
+
+now_ts() { /bin/date "+%Y-%m-%dT%H:%M:%S%z"; }
+
+log_event() {
+  [[ "${ADL_LOG:-1}" != "0" ]] || return 0
+  /bin/mkdir -p .adl 2>/dev/null || return 0
+  print -r -- "ts=$(now_ts) version=adapter cwd=$PWD event=ghostty.$*" >> "$LOG_FILE" 2>/dev/null || return 0
+}
 
 die_transport() {
   print -r -- "$*" >&2
   exit 3
-}
-
-escape_applescript_text() {
-  local text="$1"
-  text="${text//\\/\\\\}"
-  text="${text//\"/\\\"}"
-  print -r -- "$text"
 }
 
 capture_dry_run() {
@@ -61,10 +63,13 @@ APPLESCRIPT
       print -r -- "DRY RUN send to $terminal_id"
       exit 0
     fi
-    escaped="$(escape_applescript_text "$message")"
-/usr/bin/osascript <<APPLESCRIPT || die_transport "Ghostty send failed. Reconnect the target terminal and retry."
+    log_event "send.start terminal=$terminal_id message_chars=${#message}"
+    set +e
+    send_output="$(/usr/bin/osascript - "$terminal_id" "$message" <<'APPLESCRIPT' 2>&1
+on run argv
+  set targetId to item 1 of argv
+  set messageText to item 2 of argv
 tell application "Ghostty"
-  set targetId to "$terminal_id"
   set targetTerm to missing value
   repeat with candidate in every «class Gtrm»
     if ((«property ID  » of candidate as text) is targetId) then
@@ -72,11 +77,30 @@ tell application "Ghostty"
       exit repeat
     end if
   end repeat
-  if targetTerm is missing value then error "target terminal not found"
-  «event GhstInTx» "$escaped" given «class GItT»:targetTerm
-  «event GhstSKey» "enter" given «class GKeT»:targetTerm
+  if targetTerm is missing value then error "target terminal not found for id " & targetId
+  try
+    «event GhstInTx» messageText given «class GItT»:targetTerm
+  on error inputErr number inputErrNo
+    error "input text failed after terminal lookup: " & inputErr & " (" & inputErrNo & ")"
+  end try
+  try
+    «event GhstSKey» "enter" given «class GKeT»:targetTerm
+  on error keyErr number keyErrNo
+    error "send enter failed after text input: " & keyErr & " (" & keyErrNo & ")"
+  end try
+  return "send ok"
 end tell
+end run
 APPLESCRIPT
+)"
+    send_code="$?"
+    set -e
+    if [[ "$send_code" != "0" ]]; then
+      log_event "send.failed terminal=$terminal_id code=$send_code output=${(qqq)send_output}"
+      [[ -n "$send_output" ]] && print -r -- "$send_output" >&2
+      die_transport "Ghostty send failed. Reconnect the target terminal and retry."
+    fi
+    log_event "send.ok terminal=$terminal_id"
     ;;
   *)
     die_transport "Usage: ghostty-macos capture-focused architect|dev | send <terminal-id> <message>"

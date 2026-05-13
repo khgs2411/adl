@@ -216,7 +216,33 @@ assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_DEV_TERMIN
 
 mkdir -p .adl/staging
 write_dev_prompt .adl/staging/prompt2.md "Implement task B"
-"$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt2.md >/dev/null
+SEND_FAIL_ADAPTER_DIR="$TMP/send-failing-adapter"
+mkdir -p "$SEND_FAIL_ADAPTER_DIR"
+/bin/cat > "$SEND_FAIL_ADAPTER_DIR/ghostty-macos" <<'ADAPTER'
+#!/bin/zsh
+set -euo pipefail
+case "${1:-}" in
+  send)
+    print -r -- "execution error: Can't get application \"Ghostty\". (-1728)" >&2
+    exit 3
+    ;;
+  *)
+    exec "__ROOT__/scripts/ghostty-macos" "$@"
+    ;;
+esac
+ADAPTER
+sed "s#__ROOT__#$ROOT#g" "$SEND_FAIL_ADAPTER_DIR/ghostty-macos" > "$SEND_FAIL_ADAPTER_DIR/ghostty-macos.tmp"
+mv "$SEND_FAIL_ADAPTER_DIR/ghostty-macos.tmp" "$SEND_FAIL_ADAPTER_DIR/ghostty-macos"
+chmod +x "$SEND_FAIL_ADAPTER_DIR/ghostty-macos"
+set +e
+failed_arch_send="$(ADL_SCRIPT_ROOT="$SEND_FAIL_ADAPTER_DIR" "$ROOT/scripts/adl" architect send-dev --prompt-file .adl/staging/prompt2.md 2>&1)"
+failed_arch_send_code="$?"
+set -e
+assert_eq "3" "$failed_arch_send_code" "send-dev should fail when Dev wake fails"
+assert_contains "$failed_arch_send" "Rerun the same send-dev command outside the sandbox" "sandboxed send failure should explain exact recovery path"
+assert_contains "$(cat ".adl/sessions/$session_id/session.env")" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "sandboxed send failure should preserve Dev transport"
+status_after_failed_arch_send="$("$ROOT/scripts/adl" status)"
+assert_contains "$status_after_failed_arch_send" "Dev: connected" "status should keep Dev connected after sandboxed send failure"
 set +e
 inflight_connect="$("$ROOT/scripts/adl" dev connect "$pin" 2>&1)"
 inflight_code="$?"

@@ -43,6 +43,28 @@ When invoked as `$adl refresh`, run:
 
 Use `$adl` for a fresh Architect session. Use `$adl resume` only when the user explicitly wants to continue an existing ADL session as Architect. Use `$adl refresh` only to set the current pane as the Architect pane for the active session.
 
+## Inline Or Delegate
+
+ADL exists to save tokens and keep a stronger Architect model focused on judgment, not to ritualize delegation. A handoff that costs more tokens to write and review than the implementation costs is a net loss.
+
+The cost check only applies when you have already read the relevant code — typically during review, follow-up after a Dev report, or when the user surfaces a bug in code you just inspected. In that state, sizing the change is essentially free.
+
+Do not read code just to decide whether to delegate. If you have not already read the code, default to delegating — writing the slice forces useful structure and the exploration cost belongs to Dev.
+
+When you have already read the code, do the work inline if any of the following is true:
+
+- The fix is under ~20 lines, single-file, with no architectural ambiguity.
+- The slice prompt you would write is longer than the implementation.
+- The change is mechanical or well-bounded: a regex guard, a rename, a typo, a one-line security check, a small test addition.
+
+Otherwise, delegate.
+
+If the user instructs you to delegate work that fails the cost check, push back once before complying. Frame the pushback around ADL's purpose, not preference:
+
+> The slice prompt for this would be longer than the fix (~3 lines, single file, no ambiguity). Delegating costs more tokens than it saves. I'd rather make the change inline and show you the diff. Want me to delegate anyway?
+
+Only delegate after the user reaffirms. If you do the work inline, still surface it: show the diff, name the files touched, and let the user accept or redirect. Inline does not mean silent.
+
 ## Send Work To Dev
 
 When you have a Dev handoff or follow-up:
@@ -82,9 +104,13 @@ Do not create the first run until Dev is connected, unless the user explicitly a
 {{ADL_SKILLS_DIR}}/adl/scripts/adl architect send-dev --prompt-file <path>
 ```
 
+In Codex, run this `send-dev` command with escalation/outside-sandbox access when it needs to wake a Ghostty Dev pane. Do not first try a sandboxed send as a probe; sandboxed `osascript` can fail with `Can’t get application "Ghostty"` even when both ADL terminal IDs are valid.
+
 8. Tell the user only a short status such as `Passing this to the developer...`.
 
-If `send-dev` reports `Failed to wake Dev`, do not recreate the prompt from memory. Run `adl status`, use the active run's copied `dev-prompt.md` as the source of truth, ask Dev to rerun `$adl-connect <pin> --replace`, then either wake the existing active run or send a new prompt that explicitly supersedes the failed run.
+If `send-dev` reports `Can’t get application "Ghostty"` or says `Rerun the same send-dev command outside the sandbox`, do exactly that with the same copied prompt/run. Do not ask Dev to reconnect for this error.
+
+If `send-dev` reports a real Dev wake failure after running outside the sandbox, do not recreate the prompt from memory. Run `adl status`, use the active run's copied `dev-prompt.md` as the source of truth, ask Dev to rerun `$adl-connect <pin> --replace`, then either wake the existing active run or send a new prompt that explicitly supersedes the failed run.
 
 ## Ghostty Capture Recovery
 
@@ -114,16 +140,16 @@ Before approval, perform a protocol review:
 6. Check acceptance evidence: verify each acceptance criterion with evidence appropriate to the active slice, or mark it unverified with a reason.
 7. Classify out-of-scope changes as `required`, `incidental but acceptable`, or `scope drift`.
 
-Write the review in this compact shape before approving or passing work back:
+Write only a short decision record before approving or passing work back:
 
 ```text
 Verdict: Accepted | Accepted with notes | Pass this back to the Dev | Blocked
-Goal/Slice Reviewed:
-Approved Context Checked:
-Evidence Checked:
-Acceptance Result:
-Follow-up:
+Checked: report, files/diffs, focused commands, acceptance criteria
+Notes: only blockers, unverified items, or non-blocking concerns
+Next: goal complete | continue with next handoff | awaiting user
 ```
+
+Keep the written review terse. Do not restate every check or criterion unless it changes the verdict or next action. The checklist above is the review process; the decision record is only the durable outcome.
 
 Use verdicts that separate code activity from goal acceptance:
 
@@ -135,3 +161,13 @@ Use verdicts that separate code activity from goal acceptance:
 If the work is incomplete, unsafe, unverified, off-goal, or broader than requested, write a follow-up handoff to Dev using `send-dev --prompt-file`.
 
 Do not accept if any acceptance criterion is `FAIL` or unexplained `NOT VERIFIED`.
+
+After an `Accepted` or `Accepted with notes` verdict, do not treat the ADL session as complete unless the overall goal is achieved. Slice acceptance is not session completion.
+
+Classify the session's next state exactly:
+
+- `Goal complete`: no more slices remain for the active goal.
+- `Continue`: the goal is not complete, and the next Dev handoff can be sent now.
+- `Awaiting user`: a human decision, missing context, or explicit user checkpoint is required before the next slice.
+
+If the state is `Continue`, immediately prepare and send the next Dev handoff. If the state is `Awaiting user`, ask only for the blocking decision or context.

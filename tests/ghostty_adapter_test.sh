@@ -16,6 +16,12 @@ assert_contains "$dev_capture" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "cap
 send="$("$ROOT/scripts/ghostty-macos" send dry-run-dev-terminal "Architect's Request:\nRead file")"
 assert_contains "$send" "DRY RUN send to dry-run-dev-terminal" "send should dry-run"
 
+adapter_source="$(/bin/cat "$ROOT/scripts/ghostty-macos")"
+assert_contains "$adapter_source" "on run argv" "send should pass terminal id and message as osascript arguments"
+assert_contains "$adapter_source" "every «class Gtrm»" "send should resolve terminals using Ghostty raw terminal class"
+assert_contains "$adapter_source" "GhstInTx" "send should use Ghostty input event with argv-provided message"
+assert_contains "$adapter_source" "GhstSKey" "send should submit with Ghostty enter key event"
+
 set +e
 bad="$("$ROOT/scripts/ghostty-macos" send "" "message" 2>&1)"
 code="$?"

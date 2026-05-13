@@ -383,7 +383,21 @@ send_dev() {
   env_set "$sf" ADL_ACTIVE_RUN "$rid"
   env_set "$sf" ADL_STATUS "$run_status"
   if [[ -n "$dev_term" ]]; then
-    "$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md using the acceptance template, then run $(cli_path) dev notify." >/dev/null || die_transport "Failed to wake Dev. Reconnect Dev and retry. The prompt was copied to $rdir/dev-prompt.md."
+    local send_output send_code
+    set +e
+    send_output="$("$GHOSTTY" send "$dev_term" "Architect's Request: read and execute $rdir/dev-prompt.md. When done, write $rdir/dev-report.md using the acceptance template, then run $(cli_path) dev notify." 2>&1)"
+    send_code="$?"
+    set -e
+    if [[ "$send_code" != "0" ]]; then
+      print -r -- "$send_output" >&2
+      log_event "architect.send_dev wake_failed session=$sid run=$rid dev_terminal=$dev_term code=$send_code output=${(qqq)send_output}"
+      if [[ "$send_output" == *"Can’t get application \"Ghostty\""* || "$send_output" == *"Can't get application \"Ghostty\""* ]]; then
+        die_transport "Failed to wake Dev because osascript cannot reach Ghostty from this process. Rerun the same send-dev command outside the sandbox. The prompt was copied to $rdir/dev-prompt.md."
+      fi
+      env_set "$sf" ADL_DEV_ADAPTER ""
+      env_set "$sf" ADL_DEV_TERMINAL_ID ""
+      die_transport "Failed to wake Dev. Reconnect Dev and retry. The prompt was copied to $rdir/dev-prompt.md."
+    fi
     env_set "$rdir/run.env" ADL_RUN_STATUS sent_to_dev
     env_set "$rdir/run.env" ADL_SENT_AT "$(now_ts)"
     env_set "$sf" ADL_STATUS sent_to_dev
