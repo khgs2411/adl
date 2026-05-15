@@ -25,7 +25,7 @@ When invoked as `$commission-connect <pin> --replace`, run:
 {{ADL_SKILLS_DIR}}/commission/scripts/commission consumer connect <pin> --replace
 ```
 
-After connecting, read the printed `consumer-brief.md`. If the output includes `Pending Commissioner's Request: <path>`, read and execute that request immediately from your current working repository. Write the report to the printed Commissioner's `.commission/.../consumer-report.md` path, then run:
+After connecting, read the printed `consumer-brief.md` path. If the output includes `Pending Commissioner's Request: <path>`, read and execute that request immediately from your current working repository. Write the report to the printed `Write Consumer report: <path>` path, then run:
 
 ```text
 {{ADL_SKILLS_DIR}}/commission/scripts/commission consumer notify

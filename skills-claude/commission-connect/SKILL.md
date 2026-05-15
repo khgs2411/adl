@@ -19,6 +19,6 @@ When invoked as `/commission-connect <pin> --replace`, run:
 {{ADL_SKILLS_DIR}}/commission/scripts/commission consumer connect <pin> --replace
 ```
 
-If the output includes `Pending Commissioner's Request: <path>`, execute that request from your current working repository. Write the report to the printed Commissioner's `.commission/.../consumer-report.md` path, then run `{{ADL_SKILLS_DIR}}/commission/scripts/commission consumer notify`.
+Read the printed `consumer-brief.md` path. If the output includes `Pending Commissioner's Request: <path>`, execute that request from your current working repository. Write the report to the printed `Write Consumer report: <path>` path, then run `{{ADL_SKILLS_DIR}}/commission/scripts/commission consumer notify`.
 
 Reports must include acceptance results, files changed, verification, deviations, residual risks, and current repository metadata.

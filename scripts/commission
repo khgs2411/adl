@@ -76,7 +76,7 @@ validate_value() {
   [[ "$value" != *$'\n'* ]] || return 1
   case "$key" in
     COMMISSION_PROMPT_PATH|COMMISSION_REPORT_PATH)
-      [[ "$value" == .commission/* ]]
+      [[ "$value" == .commission/* || "$value" == */.commission/* ]]
       ;;
     COMMISSION_REVIEW_PATH)
       [[ -z "$value" || "$value" == .commission/* ]]
@@ -108,6 +108,11 @@ validate_value() {
 
 cli_path() {
   print -r -- "$SCRIPT_PATH"
+}
+
+artifact_path() {
+  local path="$1"
+  print -r -- "${PWD:A}/$path"
 }
 
 has_required_section() {
@@ -390,11 +395,14 @@ next_run_id() {
 write_run_env() {
   local sid="$1" rid="$2" new_status="$3"
   local rdir="$SESSIONS_DIR/$sid/runs/$rid"
+  local prompt_path report_path
+  prompt_path="$(artifact_path "$rdir/consumer-prompt.md")"
+  report_path="$(artifact_path "$rdir/consumer-report.md")"
   {
     print -r -- "COMMISSION_RUN_ID='$rid'"
     print -r -- "COMMISSION_RUN_STATUS='$new_status'"
-    print -r -- "COMMISSION_PROMPT_PATH='$rdir/consumer-prompt.md'"
-    print -r -- "COMMISSION_REPORT_PATH='$rdir/consumer-report.md'"
+    print -r -- "COMMISSION_PROMPT_PATH='$prompt_path'"
+    print -r -- "COMMISSION_REPORT_PATH='$report_path'"
     print -r -- "COMMISSION_CREATED_AT='$(now_ts)'"
     print -r -- "COMMISSION_SENT_AT=''"
     print -r -- "COMMISSION_REPORTED_AT=''"
@@ -447,7 +455,7 @@ send_consumer() {
   env_set "$sf" COMMISSION_ACTIVE_RUN "$rid"
   env_set "$sf" COMMISSION_STATUS "$run_status"
   if [[ -n "$consumer_term" ]]; then
-    "$GHOSTTY" send "$consumer_term" "Commissioner's Request: read and execute $rdir/consumer-prompt.md. When done, write $rdir/consumer-report.md using the acceptance template, then run $(cli_path) consumer notify." >/dev/null || die_transport "Failed to wake Consumer. Reconnect Consumer and retry. The prompt was copied to $rdir/consumer-prompt.md."
+    "$GHOSTTY" send "$consumer_term" "Commissioner's Request: read and execute $(artifact_path "$rdir/consumer-prompt.md"). When done, write $(artifact_path "$rdir/consumer-report.md") using the acceptance template, then run $(cli_path) consumer notify." >/dev/null || die_transport "Failed to wake Consumer. Reconnect Consumer and retry. The prompt was copied to $(artifact_path "$rdir/consumer-prompt.md")."
     env_set "$rdir/run.env" COMMISSION_RUN_STATUS sent_to_consumer
     env_set "$rdir/run.env" COMMISSION_SENT_AT "$(now_ts)"
     env_set "$sf" COMMISSION_STATUS sent_to_consumer
@@ -559,10 +567,13 @@ connect_consumer() {
   print -r -- "Connected to Commission session $p."
   print -r -- "Commissioner notified: Consumer connected and ready."
   print -r -- "Read your persistent consumer brief:"
-  print -r -- "$SESSIONS_DIR/$found/consumer-brief.md"
+  print -r -- "$(artifact_path "$SESSIONS_DIR/$found/consumer-brief.md")"
   case "$active_status" in
     pending_consumer_connection|sent_to_consumer)
-      [[ -n "$active" ]] && print -r -- "Pending Commissioner's Request: $SESSIONS_DIR/$found/runs/$active/consumer-prompt.md"
+      if [[ -n "$active" ]]; then
+        print -r -- "Pending Commissioner's Request: $(artifact_path "$SESSIONS_DIR/$found/runs/$active/consumer-prompt.md")"
+        print -r -- "Write Consumer report: $(artifact_path "$SESSIONS_DIR/$found/runs/$active/consumer-report.md")"
+      fi
       ;;
   esac
   return 0
