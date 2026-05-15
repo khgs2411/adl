@@ -1,0 +1,40 @@
+#!/bin/zsh
+set -euo pipefail
+
+RM="/bin/rm"
+AWK="/usr/bin/awk"
+
+die() {
+  print -r -- "$*" >&2
+  exit 1
+}
+
+[[ "$#" == "1" ]] || die "Usage: commission-clear <cwd/.commission>"
+
+target="${1:A}"
+expected="${PWD:A}/.commission"
+routing_dir="${COMMISSION_ROUTING_DIR:-$HOME/.commission}"
+
+[[ "$target" == "$expected" ]] || die "Refusing to clear anything except this working directory's .commission: $expected"
+[[ "${target:t}" == ".commission" ]] || die "Refusing to clear a non-.commission path: $target"
+[[ ! -L "$target" ]] || die "Refusing to clear symlinked .commission path: $target"
+
+cleanup_routes() {
+  local file cwd
+  for file in "$routing_dir"/pins/*.env(N) "$routing_dir"/consumers/*.env(N); do
+    cwd="$("$AWK" -F"'" '$1 == "COMMISSION_COMMISSIONER_CWD=" && $3 == "" { print $2; exit }' "$file" 2>/dev/null || true)"
+    [[ "$cwd" == "${PWD:A}" ]] && "$RM" -f -- "$file"
+  done
+}
+
+cleanup_routes
+
+if [[ ! -e "$target" ]]; then
+  print -r -- "No Commission state found: $target"
+  exit 0
+fi
+
+[[ -d "$target" ]] || die "Refusing to clear non-directory .commission path: $target"
+
+"$RM" -rf -- "$target"
+print -r -- "Cleared Commission state: $target"

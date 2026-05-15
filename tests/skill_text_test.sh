@@ -10,18 +10,38 @@ connect_skill_text="$(cat "$ROOT/skills/adl-connect/SKILL.md")"
 claude_skill_text="$(cat "$ROOT/skills-claude/adl/SKILL.md")"
 claude_reset_skill_text="$(cat "$ROOT/skills-claude/adl-reset/SKILL.md")"
 claude_connect_skill_text="$(cat "$ROOT/skills-claude/adl-connect/SKILL.md")"
+commission_skill_text="$(cat "$ROOT/skills/commission/SKILL.md")"
+commission_clear_skill_text="$(cat "$ROOT/skills/commission-clear/SKILL.md")"
+commission_connect_skill_text="$(cat "$ROOT/skills/commission-connect/SKILL.md")"
+claude_commission_skill_text="$(cat "$ROOT/skills-claude/commission/SKILL.md")"
+claude_commission_clear_skill_text="$(cat "$ROOT/skills-claude/commission-clear/SKILL.md")"
+claude_commission_connect_skill_text="$(cat "$ROOT/skills-claude/commission-connect/SKILL.md")"
 all_skill_text="$skill_text
 $reset_skill_text
 $connect_skill_text
 $claude_skill_text
 $claude_reset_skill_text
-$claude_connect_skill_text"
+$claude_connect_skill_text
+$commission_skill_text
+$commission_clear_skill_text
+$commission_connect_skill_text
+$claude_commission_skill_text
+$claude_commission_clear_skill_text
+$claude_commission_connect_skill_text"
 
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.codex/skills" "source skill templates should not contain maintainer-local Codex paths"
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.claude/skills" "source skill templates should not contain maintainer-local Claude paths"
 assert_contains "$skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Codex Architect template should use install path token"
 assert_contains "$connect_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl dev connect <pin>" "Codex connect template should use install path token"
 assert_contains "$reset_skill_text" '{{ADL_SKILLS_DIR}}/adl-reset/scripts/adl-reset "$PWD/.adl"' "Codex reset template should use install path token"
+assert_contains "$commission_skill_text" "{{ADL_SKILLS_DIR}}/commission/scripts/commission" "Codex Commission template should use install path token"
+assert_contains "$commission_connect_skill_text" "{{ADL_SKILLS_DIR}}/commission/scripts/commission consumer connect <pin>" "Codex Commission connect template should use install path token"
+assert_contains "$commission_clear_skill_text" '{{ADL_SKILLS_DIR}}/commission-clear/scripts/commission-clear "$PWD/.commission"' "Codex Commission clear template should use install path token"
+assert_contains "$commission_skill_text" "Commissioner's current working directory owns the protocol truth under \`.commission/\`" "Commission skill should document Commissioner-local truth"
+assert_contains "$commission_connect_skill_text" "including from a different repository" "Commission connect should document cross-repo use"
+assert_contains "$commission_connect_skill_text" "Consumer Report" "Commission connect should use Consumer report terminology"
+assert_not_contains "$commission_skill_text" "Architect" "Commission skill should not use Architect as active role"
+assert_not_contains "$commission_connect_skill_text" "Developer" "Commission connect should not use Developer as active role"
 
 assert_contains "$skill_text" "adl architect resume" "Architect skill should document resume command"
 assert_contains "$skill_text" "adl architect refresh" "Architect skill should document refresh command"
@@ -78,6 +98,12 @@ assert_contains "$claude_connect_skill_text" "Pending Architect's Request: <path
 assert_contains "$claude_connect_skill_text" "## Acceptance Results" "Claude Dev connect skill should require acceptance-shaped reports"
 assert_contains "$claude_reset_skill_text" 'When invoked as `/adl-reset`' "Claude ADL reset skill should document slash invocation"
 assert_contains "$claude_reset_skill_text" '{{ADL_SKILLS_DIR}}/adl-reset/scripts/adl-reset "$PWD/.adl"' "Claude ADL reset skill should pass cwd .adl to reset script"
+assert_contains "$claude_commission_skill_text" "{{ADL_SKILLS_DIR}}/commission/scripts/commission" "Claude Commission template should use install path token"
+assert_contains "$claude_commission_connect_skill_text" "{{ADL_SKILLS_DIR}}/commission/scripts/commission consumer connect <pin>" "Claude Commission connect template should use install path token"
+assert_contains "$claude_commission_clear_skill_text" '{{ADL_SKILLS_DIR}}/commission-clear/scripts/commission-clear "$PWD/.commission"' "Claude Commission clear template should use install path token"
+assert_contains "$claude_commission_skill_text" "Connect Consumer with /commission-connect 123456" "Claude Commission skill should use slash connect invocation"
+assert_not_contains "$claude_commission_skill_text" "Architect" "Claude Commission skill should not use Architect as active role"
+assert_not_contains "$claude_commission_connect_skill_text" "Developer" "Claude Commission connect should not use Developer as active role"
 assert_contains "$claude_reset_skill_text" "not as a project artifact" "Claude ADL reset skill should frame .adl as protocol state"
 assert_contains "$claude_connect_skill_text" "Claude Code" "Claude Dev connect skill should name Claude Code"
 assert_contains "$claude_connect_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Claude Dev connect skill should use install path token"
