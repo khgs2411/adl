@@ -29,6 +29,29 @@ $claude_commission_skill_text
 $claude_commission_connect_skill_text
 $claude_commission_reset_skill_text"
 
+assert_skill_frontmatter() {
+  local file_path="$1"
+  local name="$2"
+  local text
+  text="$(/bin/cat "$file_path")"
+  assert_contains "$text" $'---\nname: '"$name" "skill should start with YAML frontmatter name: $file_path"
+  assert_contains "$text" $'\ndescription: ' "skill should include YAML frontmatter description: $file_path"
+  assert_contains "$text" $'\n---\n\n#' "skill should close YAML frontmatter before markdown heading: $file_path"
+}
+
+assert_skill_frontmatter "$ROOT/skills/adl/SKILL.md" "adl"
+assert_skill_frontmatter "$ROOT/skills/adl-connect/SKILL.md" "adl-connect"
+assert_skill_frontmatter "$ROOT/skills/adl-reset/SKILL.md" "adl-reset"
+assert_skill_frontmatter "$ROOT/skills/commission/SKILL.md" "commission"
+assert_skill_frontmatter "$ROOT/skills/commission-connect/SKILL.md" "commission-connect"
+assert_skill_frontmatter "$ROOT/skills/commission-reset/SKILL.md" "commission-reset"
+assert_skill_frontmatter "$ROOT/skills-claude/adl/SKILL.md" "adl"
+assert_skill_frontmatter "$ROOT/skills-claude/adl-connect/SKILL.md" "adl-connect"
+assert_skill_frontmatter "$ROOT/skills-claude/adl-reset/SKILL.md" "adl-reset"
+assert_skill_frontmatter "$ROOT/skills-claude/commission/SKILL.md" "commission"
+assert_skill_frontmatter "$ROOT/skills-claude/commission-connect/SKILL.md" "commission-connect"
+assert_skill_frontmatter "$ROOT/skills-claude/commission-reset/SKILL.md" "commission-reset"
+
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.codex/skills" "source skill templates should not contain maintainer-local Codex paths"
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.claude/skills" "source skill templates should not contain maintainer-local Claude paths"
 assert_contains "$skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Codex Architect template should use install path token"

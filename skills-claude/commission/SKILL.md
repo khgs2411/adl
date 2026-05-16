@@ -1,3 +1,8 @@
+---
+name: commission
+description: Invoke as commission for the Commissioner side of the Commissioner-Consumer protocol in Claude Code. Use to start a Commission session, send scoped requests to a Consumer, and review Consumer reports.
+---
+
 # Commission
 
 When invoked as `/commission`, start or resume the Commissioner side of a Commission session in Claude Code.

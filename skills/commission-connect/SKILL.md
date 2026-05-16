@@ -1,3 +1,8 @@
+---
+name: commission-connect
+description: Invoke as commission-connect for the Consumer side of the Commissioner-Consumer protocol. Use with a pin to connect from any directory while working against the printed target repo.
+---
+
 # Commission Connect
 
 When invoked as `$commission-connect <pin>`, connect as the Consumer:

@@ -1,3 +1,8 @@
+---
+name: commission-reset
+description: Invoke as commission-reset to remove the current working directory's Commission protocol state and matching global routes.
+---
+
 # Commission Reset
 
 When invoked as `$commission-reset`, remove only this working directory's `.commission/` protocol state and matching global Commission routes:
