@@ -6,7 +6,18 @@ SCRIPT_PATH="${0:A}"
 SCRIPT_DIR="${SCRIPT_PATH:h}"
 ADAPTER_DIR="${COMMISSION_SCRIPT_ROOT:-$SCRIPT_DIR}"
 GHOSTTY="$ADAPTER_DIR/ghostty-macos"
-if [[ "$SCRIPT_PATH" == */.claude/skills/* ]]; then
+
+installed_skills_dir_from_script() {
+  if [[ "${SCRIPT_DIR:t}" == "scripts" && "${SCRIPT_DIR:h:t}" == "commission" ]]; then
+    print -r -- "${SCRIPT_DIR:h:h}"
+    return 0
+  fi
+  return 1
+}
+
+if SKILLS_DIR="$(installed_skills_dir_from_script)"; then
+  :
+elif [[ "$SCRIPT_PATH" == */.claude/skills/* ]]; then
   SKILLS_DIR="${COMMISSION_CLAUDE_SKILLS_DIR:-${ADL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}}"
 else
   SKILLS_DIR="${COMMISSION_CODEX_SKILLS_DIR:-${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}}"
