@@ -333,7 +333,7 @@ send_consumer() {
   env_set "$sf" COMMISSION_STATUS "$next_status"
   consumer_term="$(env_get "$sf" COMMISSION_CONSUMER_TERMINAL_ID || true)"
   if [[ -n "$consumer_term" ]]; then
-    "$GHOSTTY" send "$consumer_term" "Commissioner's Request: work in $(env_get "$sf" COMMISSION_TARGET_REPO). Read $PWD/$rdir/consumer-prompt.md. When done, write $PWD/$rdir/consumer-report.md, then run $(cli_path) consumer notify." >/dev/null || die_transport "Failed to wake Consumer. Reconnect Consumer and retry."
+    "$GHOSTTY" send "$consumer_term" "Commissioner's Request: target repo $(env_get "$sf" COMMISSION_TARGET_REPO). Read $PWD/$rdir/consumer-prompt.md. Handle it using that repo's own instructions and operating model. When resolved or blocked, write $PWD/$rdir/consumer-report.md, then run $(cli_path) consumer notify." >/dev/null || die_transport "Failed to wake Consumer. Reconnect Consumer and retry."
     env_set "$rdir/run.env" COMMISSION_RUN_STATUS sent_to_consumer
     env_set "$rdir/run.env" COMMISSION_SENT_AT "$(now_ts)"
     env_set "$sf" COMMISSION_STATUS sent_to_consumer
@@ -355,9 +355,11 @@ write_consumer_brief_once() {
   {
     print -r -- "# Commission Consumer Brief"
     print -r -- ""
-    print -r -- "Implement only in the target repo printed by connect."
+    print -r -- "Use the target repo printed by connect as authoritative for the request."
     print -r -- "Consumer entry cwd is only a routing anchor for reconnect and notify."
-    print -r -- "Write consumer-report.md using the acceptance template, then run $(cli_path) consumer notify."
+    print -r -- "Handle the request according to the target repo's own instructions and operating model."
+    print -r -- "Commission transports the request, scope, acceptance criteria, expected evidence, and target repo; it does not choose direct implementation versus a repo-local orchestration workflow."
+    print -r -- "When resolved or blocked, write consumer-report.md using the acceptance template, then run $(cli_path) consumer notify."
   } | safe_write "$brief"
 }
 

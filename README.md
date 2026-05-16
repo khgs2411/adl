@@ -217,7 +217,7 @@ Raw CLI:
 commission consumer connect <pin>
 ```
 
-The connect output prints the target repo, pending request path, report path, and notify command. The Consumer must implement in the printed target repo.
+The connect output prints the target repo, pending request path, report path, and notify command. The Consumer handles the request according to the printed target repo's own instructions and operating model; the Consumer entry cwd is only a routing anchor.
 
 Commissioner handoffs are sent from `.commission/staging/`:
 
