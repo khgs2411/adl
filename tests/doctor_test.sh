@@ -93,8 +93,9 @@ assert_contains "$commission_doctor" "global.version: 8.8.8" "commission doctor 
 export HOME="$TMP/home"
 export ADL_CLAUDE_SKILLS_DIR="$TMP/custom-claude-skills"
 "$ROOT/.install.sh" --claude --update >/dev/null
-custom_claude_commission_doctor="$("$ADL_CLAUDE_SKILLS_DIR/commission/scripts/commission" doctor)"
-assert_contains "$custom_claude_commission_doctor" "global.marker: present ($ADL_CLAUDE_SKILLS_DIR/commission/.commission-framework)" "installed custom Claude commission doctor should report its installed marker path"
+custom_claude_skills_dir="${ADL_CLAUDE_SKILLS_DIR:A}"
+custom_claude_commission_doctor="$("$custom_claude_skills_dir/commission/scripts/commission" doctor)"
+assert_contains "$custom_claude_commission_doctor" "global.marker: present ($custom_claude_skills_dir/commission/.commission-framework)" "installed custom Claude commission doctor should report its installed marker path"
 assert_contains "$custom_claude_commission_doctor" "global.version: $expected_cli_version" "installed custom Claude commission doctor should report installed commission version"
 
 commission_ghostty="$("$ROOT/scripts/commission" doctor ghostty commissioner)"
