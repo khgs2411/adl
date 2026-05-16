@@ -39,6 +39,18 @@ ADL does not scrape arbitrary terminal output, approve work automatically, or cr
 
 The Ghostty/macOS dependency is a transport limitation, not a product boundary. The protocol is intentionally shaped so future adapters can support other terminals and operating systems.
 
+## Commission
+
+Commission is a sibling protocol for delegating work on the Commissioner's repository to a Consumer that may currently be in another directory. The key invariant is that the Consumer entry cwd is not the implementation target.
+
+Commission distinguishes three paths:
+
+- Commissioner root: where `$commission` starts and where `.commission/` lives.
+- Target repo: the Commissioner's git root, or the Commissioner cwd when there is no git root.
+- Consumer entry cwd: where `$commission-connect <pin>` is invoked; it is only a reconnect and notify routing anchor.
+
+The Commissioner repository owns all requests, reports, reviews, and logs. The Consumer's unrelated repository does not receive protocol truth state.
+
 ## How The Loop Works
 
 ```text
@@ -87,6 +99,16 @@ Release maintainers can explicitly bump the product version and reinstall in one
 ```
 
 The `VERSION` file is protected by `.github/CODEOWNERS`; configure branch protection to require Code Owner review so version bumps cannot merge without maintainer approval.
+
+The installer also installs Commission skills and scripts:
+
+```text
+$commission
+$commission-connect <pin>
+$commission-reset
+```
+
+Existing unrelated skills named `commission`, `commission-connect`, or `commission-reset` are backed up before replacement unless they have ADL Project managed markers.
 
 ## Use
 
@@ -166,6 +188,62 @@ adl-reset "$PWD/.adl"
 ```
 
 `adl doctor` is read-only. `adl-reset` removes only the current working directory's `.adl/` directory so the next `$adl` starts clean.
+
+### Commission Usage
+
+Start Commission from the repository that should receive the work:
+
+```text
+$commission
+/commission
+```
+
+Raw CLI:
+
+```sh
+commission commissioner start
+```
+
+Connect the Consumer from any directory:
+
+```text
+$commission-connect <pin>
+/commission-connect <pin>
+```
+
+Raw CLI:
+
+```sh
+commission consumer connect <pin>
+```
+
+The connect output prints the target repo, pending request path, report path, and notify command. The Consumer must implement in the printed target repo.
+
+Commissioner handoffs are sent from `.commission/staging/`:
+
+```sh
+commission commissioner send-consumer --prompt-file .commission/staging/request.md
+```
+
+Consumer reports are written under the Commissioner's `.commission/sessions/.../runs/.../consumer-report.md`, then sent with:
+
+```sh
+commission consumer notify
+```
+
+`consumer notify` first checks the Consumer route for the current cwd, then falls back to local `.commission/`. This prevents an unrelated local `.commission/` in the Consumer entry cwd from stealing the notification.
+
+Diagnostics and reset:
+
+```sh
+commission status
+commission doctor
+commission doctor ghostty commissioner
+commission doctor ghostty consumer
+commission-reset "$PWD/.commission"
+```
+
+`commission-reset` removes only the current directory's `.commission/` and matching global routes for that Commissioner root.
 
 ## Repository Layout
 

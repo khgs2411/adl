@@ -53,6 +53,8 @@ require_file() {
 
 require_file "$ROOT/scripts/adl"
 require_file "$ROOT/scripts/adl-reset"
+require_file "$ROOT/scripts/commission"
+require_file "$ROOT/scripts/commission-reset"
 require_file "$ROOT/scripts/ghostty-macos"
 
 bumped_version() {
@@ -86,6 +88,22 @@ render_skill_template() {
   ADL_SKILLS_DIR="$skills_dir" "$PERL" -0pi -e 'BEGIN { $skills_dir=$ENV{ADL_SKILLS_DIR}; } s/\{\{ADL_SKILLS_DIR\}\}/$skills_dir/g' "$file"
 }
 
+backup_if_unmanaged() {
+  local target="$1"
+  local marker="$2"
+  local backup_root="$3"
+  local name="${target:t}"
+  if [[ -d "$target" && ! -f "$marker" ]]; then
+    local ts backup
+    ts="$("$DATE" +%Y%m%d-%H%M%S)"
+    backup="$backup_root/$ts/$name"
+    "$MKDIR" -p "$backup:h"
+    "$CP" -R "$target" "$backup"
+    print -r -- "Backed up existing $name skill to: $backup"
+    print -r -- "Rollback: \"$RM\" -rf '$target' && \"$CP\" -R '$backup' '$target'"
+  fi
+}
+
 if [[ -n "$BUMP_MODE" ]]; then
   VERSION="$(bumped_version "$BUMP_MODE" "$VERSION")"
   print -r -- "$VERSION" > "$VERSION_FILE"
@@ -109,46 +127,72 @@ install_runtime() {
   local adl_target="$skills_dir/adl"
   local reset_target="$skills_dir/adl-reset"
   local connect_target="$skills_dir/adl-connect"
+  local commission_target="$skills_dir/commission"
+  local commission_reset_target="$skills_dir/commission-reset"
+  local commission_connect_target="$skills_dir/commission-connect"
   local backup_root="$skills_dir/.adl-project-backups"
   local marker="$adl_target/.adl-framework"
+  local commission_marker="$commission_target/.commission-framework"
 
   require_file "$source_skills_dir/adl/SKILL.md"
   require_file "$source_skills_dir/adl-reset/SKILL.md"
   require_file "$source_skills_dir/adl-connect/SKILL.md"
+  require_file "$source_skills_dir/commission/SKILL.md"
+  require_file "$source_skills_dir/commission-reset/SKILL.md"
+  require_file "$source_skills_dir/commission-connect/SKILL.md"
 
   "$MKDIR" -p "$skills_dir"
 
-  if [[ -d "$adl_target" && ! -f "$marker" ]]; then
-    local ts backup
-    ts="$("$DATE" +%Y%m%d-%H%M%S)"
-    backup="$backup_root/$ts/adl"
-    "$MKDIR" -p "$backup:h"
-    "$CP" -R "$adl_target" "$backup"
-    print -r -- "Backed up existing adl skill to: $backup"
-    print -r -- "Rollback: \"$RM\" -rf '$adl_target' && \"$CP\" -R '$backup' '$adl_target'"
-  fi
+  backup_if_unmanaged "$adl_target" "$adl_target/.adl-managed" "$backup_root"
+  backup_if_unmanaged "$reset_target" "$reset_target/.adl-managed" "$backup_root"
+  backup_if_unmanaged "$connect_target" "$connect_target/.adl-managed" "$backup_root"
+  backup_if_unmanaged "$commission_target" "$commission_target/.commission-managed" "$backup_root"
+  backup_if_unmanaged "$commission_reset_target" "$commission_reset_target/.commission-managed" "$backup_root"
+  backup_if_unmanaged "$commission_connect_target" "$commission_connect_target/.commission-managed" "$backup_root"
 
-  "$RM" -rf "$adl_target" "$skills_dir/adl-clear" "$reset_target" "$connect_target"
-  "$MKDIR" -p "$adl_target/scripts" "$connect_target"
-  "$MKDIR" -p "$reset_target/scripts"
+  "$RM" -rf "$adl_target" "$skills_dir/adl-clear" "$reset_target" "$connect_target" "$commission_target" "$commission_reset_target" "$commission_connect_target"
+  "$MKDIR" -p "$adl_target/scripts" "$connect_target" "$reset_target/scripts"
+  "$MKDIR" -p "$commission_target/scripts" "$commission_connect_target" "$commission_reset_target/scripts"
 
   "$CP" "$source_skills_dir/adl/SKILL.md" "$adl_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-reset/SKILL.md" "$reset_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-connect/SKILL.md" "$connect_target/SKILL.md"
+  "$CP" "$source_skills_dir/commission/SKILL.md" "$commission_target/SKILL.md"
+  "$CP" "$source_skills_dir/commission-reset/SKILL.md" "$commission_reset_target/SKILL.md"
+  "$CP" "$source_skills_dir/commission-connect/SKILL.md" "$commission_connect_target/SKILL.md"
   render_skill_template "$adl_target/SKILL.md" "$skills_dir"
   render_skill_template "$reset_target/SKILL.md" "$skills_dir"
   render_skill_template "$connect_target/SKILL.md" "$skills_dir"
+  render_skill_template "$commission_target/SKILL.md" "$skills_dir"
+  render_skill_template "$commission_reset_target/SKILL.md" "$skills_dir"
+  render_skill_template "$commission_connect_target/SKILL.md" "$skills_dir"
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
   "$CP" "$ROOT/VERSION" "$adl_target/VERSION"
   "$CP" "$ROOT/scripts/adl-reset" "$reset_target/scripts/adl-reset"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
-  "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"
+  "$CP" "$ROOT/scripts/commission" "$commission_target/scripts/commission"
+  "$CP" "$ROOT/VERSION" "$commission_target/VERSION"
+  "$CP" "$ROOT/scripts/commission-reset" "$commission_reset_target/scripts/commission-reset"
+  "$CP" "$ROOT/scripts/ghostty-macos" "$commission_target/scripts/ghostty-macos"
+  "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos" "$commission_target/scripts/commission" "$commission_target/scripts/ghostty-macos"
   "$CHMOD" +x "$reset_target/scripts/adl-reset"
+  "$CHMOD" +x "$commission_reset_target/scripts/commission-reset"
 
   {
     print -r -- "ADL_VERSION='$VERSION'"
     print -r -- "ADL_SOURCE='$ROOT'"
   } > "$marker"
+  print -r -- "ADL_MANAGED='1'" > "$adl_target/.adl-managed"
+  print -r -- "ADL_MANAGED='1'" > "$reset_target/.adl-managed"
+  print -r -- "ADL_MANAGED='1'" > "$connect_target/.adl-managed"
+
+  {
+    print -r -- "COMMISSION_VERSION='$VERSION'"
+    print -r -- "COMMISSION_SOURCE='$ROOT'"
+  } > "$commission_marker"
+  print -r -- "COMMISSION_MANAGED='1'" > "$commission_target/.commission-managed"
+  print -r -- "COMMISSION_MANAGED='1'" > "$commission_reset_target/.commission-managed"
+  print -r -- "COMMISSION_MANAGED='1'" > "$commission_connect_target/.commission-managed"
 
   print -r -- "Installed $runtime_label $VERSION into $skills_dir"
 }

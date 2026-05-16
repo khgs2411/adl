@@ -1,0 +1,45 @@
+#!/bin/zsh
+set -euo pipefail
+
+RM="/bin/rm"
+FIND="/usr/bin/find"
+AWK="/usr/bin/awk"
+
+die() {
+  print -r -- "$*" >&2
+  exit 1
+}
+
+env_get_raw() {
+  local file="$1" key="$2"
+  "$AWK" -F"'" -v key="$key" '$1 == key"=" && $3 == "" { print $2; found=1; exit } END { if (!found) exit 1 }' "$file"
+}
+
+[[ "$#" == "1" ]] || die "Usage: commission-reset <cwd/.commission>"
+
+target="${1:A}"
+expected="${PWD:A}/.commission"
+ROUTING_DIR="${COMMISSION_ROUTING_DIR:-$HOME/.commission}"
+
+[[ "$target" == "$expected" ]] || die "Refusing to reset anything except this working directory's .commission: $expected"
+[[ "${target:t}" == ".commission" ]] || die "Refusing to reset a non-.commission path: $target"
+[[ ! -L "$target" ]] || die "Refusing to reset symlinked .commission path: $target"
+
+if [[ ! -e "$target" ]]; then
+  print -r -- "No Commission state found: $target"
+  exit 0
+fi
+
+[[ -d "$target" ]] || die "Refusing to reset non-directory .commission path: $target"
+
+root="${PWD:A}"
+if [[ -d "$ROUTING_DIR" ]]; then
+  for route in "$ROUTING_DIR"/pins/*.env(N) "$ROUTING_DIR"/consumers/*.env(N); do
+    [[ -f "$route" ]] || continue
+    route_root="$(env_get_raw "$route" COMMISSION_COMMISSIONER_ROOT 2>/dev/null || true)"
+    [[ "$route_root" == "$root" ]] && "$RM" -f -- "$route"
+  done
+fi
+
+"$RM" -rf -- "$target"
+print -r -- "Reset Commission state: $target"

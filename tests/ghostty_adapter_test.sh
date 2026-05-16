@@ -13,6 +13,13 @@ assert_contains "$capture" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-termina
 dev_capture="$("$ROOT/scripts/ghostty-macos" capture-focused dev)"
 assert_contains "$dev_capture" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "capture should emit dry dev terminal id"
 
+commissioner_capture="$("$ROOT/scripts/ghostty-macos" capture-focused commissioner)"
+assert_contains "$commissioner_capture" "COMMISSION_COMMISSIONER_ADAPTER='ghostty-macos'" "capture should emit commissioner adapter"
+assert_contains "$commissioner_capture" "COMMISSION_COMMISSIONER_TERMINAL_ID='dry-run-commissioner-terminal'" "capture should emit dry commissioner terminal id"
+
+consumer_capture="$("$ROOT/scripts/ghostty-macos" capture-focused consumer)"
+assert_contains "$consumer_capture" "COMMISSION_CONSUMER_TERMINAL_ID='dry-run-consumer-terminal'" "capture should emit dry consumer terminal id"
+
 send="$("$ROOT/scripts/ghostty-macos" send dry-run-dev-terminal "Architect's Request:\nRead file")"
 assert_contains "$send" "DRY RUN send to dry-run-dev-terminal" "send should dry-run"
 

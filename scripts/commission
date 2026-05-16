@@ -1,0 +1,598 @@
+#!/bin/zsh
+set -euo pipefail
+setopt EXTENDED_GLOB
+
+SCRIPT_PATH="${0:A}"
+SCRIPT_DIR="${SCRIPT_PATH:h}"
+ADAPTER_DIR="${COMMISSION_SCRIPT_ROOT:-$SCRIPT_DIR}"
+GHOSTTY="$ADAPTER_DIR/ghostty-macos"
+if [[ "$SCRIPT_PATH" == */.claude/skills/* ]]; then
+  SKILLS_DIR="${COMMISSION_CLAUDE_SKILLS_DIR:-${ADL_CLAUDE_SKILLS_DIR:-$HOME/.claude/skills}}"
+else
+  SKILLS_DIR="${COMMISSION_CODEX_SKILLS_DIR:-${ADL_CODEX_SKILLS_DIR:-$HOME/.codex/skills}}"
+fi
+GLOBAL_MARKER="$SKILLS_DIR/commission/.commission-framework"
+COMMISSION_DIR=".commission"
+SESSIONS_DIR="$COMMISSION_DIR/sessions"
+STAGING_DIR="$COMMISSION_DIR/staging"
+ACTIVE_FILE="$COMMISSION_DIR/active-session"
+ROUTING_DIR="${COMMISSION_ROUTING_DIR:-$HOME/.commission}"
+DATE="/bin/date"
+CAT="/bin/cat"
+CP="/bin/cp"
+MKDIR="/bin/mkdir"
+MV="/bin/mv"
+RM="/bin/rm"
+AWK="/usr/bin/awk"
+CKSUM="/usr/bin/cksum"
+GIT="/usr/bin/git"
+VERSION_FILE="$SCRIPT_DIR/../VERSION"
+VERSION="$("$CAT" "$VERSION_FILE" 2>/dev/null || print -r -- "0.0.0-dev")"
+LOG_FILE="$COMMISSION_DIR/commission.log"
+
+log_enabled() { [[ "${COMMISSION_LOG:-1}" != "0" ]]; }
+now_ts() { "$DATE" "+%Y-%m-%dT%H:%M:%S%z"; }
+pin() { printf "%06d\n" "$((100000 + RANDOM % 900000))"; }
+session_id_for_pin() { print -r -- "$("$DATE" "+%Y-%m-%d-%H%M%S")-$1"; }
+
+log_event() {
+  log_enabled || return 0
+  "$MKDIR" -p "$COMMISSION_DIR" 2>/dev/null || return 0
+  print -r -- "ts=$(now_ts) version=$VERSION cwd=$PWD event=$*" >> "$LOG_FILE" 2>/dev/null || return 0
+}
+
+die() { log_event "error code=1 message=${(qqq)*}"; print -r -- "$*" >&2; exit 1; }
+die_state() { log_event "error code=2 message=${(qqq)*}"; print -r -- "$*" >&2; exit 2; }
+die_transport() { log_event "error code=3 message=${(qqq)*}"; print -r -- "$*" >&2; exit 3; }
+
+skill_invocation() {
+  local skill="$1"
+  if [[ "$SCRIPT_PATH" == */.claude/skills/* ]]; then
+    print -r -- "/$skill"
+  else
+    print -r -- "\$$skill"
+  fi
+}
+
+safe_write() {
+  local output_file="$1"
+  local tmp="$output_file.tmp.$$"
+  "$CAT" > "$tmp"
+  "$MV" "$tmp" "$output_file"
+}
+
+allowed_key() {
+  case "$1" in
+    COMMISSION_SESSION_ID|COMMISSION_PIN|COMMISSION_STATUS|COMMISSION_ACTIVE_RUN|COMMISSION_COMMISSIONER_ADAPTER|COMMISSION_COMMISSIONER_TERMINAL_ID|COMMISSION_CONSUMER_ADAPTER|COMMISSION_CONSUMER_TERMINAL_ID|COMMISSION_COMMISSIONER_ROOT|COMMISSION_TARGET_REPO|COMMISSION_CONSUMER_ENTRY_CWD|COMMISSION_VERSION|COMMISSION_SOURCE|COMMISSION_RUN_ID|COMMISSION_RUN_STATUS|COMMISSION_PROMPT_PATH|COMMISSION_REPORT_PATH|COMMISSION_REVIEW_PATH|COMMISSION_CREATED_AT|COMMISSION_SENT_AT|COMMISSION_REPORTED_AT|COMMISSION_REVIEWED_AT|COMMISSION_REVIEW_VERDICT|COMMISSION_SUPERSEDED_BY)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+validate_value() {
+  local key="$1" value="$2"
+  [[ "$value" != *$'\n'* ]] || return 1
+  case "$key" in
+    COMMISSION_SESSION_ID) [[ "$value" == [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9] ]] ;;
+    COMMISSION_PIN) [[ "$value" == <100000-999999> ]] ;;
+    COMMISSION_STATUS|COMMISSION_RUN_STATUS)
+      case "$value" in
+        waiting_for_consumer|pending_consumer_connection|sent_to_consumer|reported|accepted|accepted_with_notes|passed_back|blocked|superseded|closed) return 0 ;;
+        *) return 1 ;;
+      esac ;;
+    *) [[ -z "$value" || "$value" == [A-Za-z0-9._:/+-]## ]] ;;
+  esac
+}
+
+validate_env_file() {
+  local file="$1" line key prefix suffix value
+  [[ -f "$file" ]] || return 1
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    key="${line%%=*}"
+    allowed_key "$key" || die_state "Unknown Commission env key in $file: $key"
+    prefix="$key='"; suffix="'"
+    [[ "$line" == "$prefix"*"$suffix" ]] || die_state "Malformed Commission env line in $file: $line"
+    value="${line#$prefix}"; value="${value%$suffix}"
+    validate_value "$key" "$value" || die_state "Unsafe Commission env value for $key in $file"
+  done < "$file"
+}
+
+env_get() {
+  local file="$1" key="$2" value
+  allowed_key "$key" || die_state "Unknown Commission env key: $key"
+  [[ -f "$file" ]] || return 1
+  validate_env_file "$file"
+  value="$("$AWK" -F"'" -v key="$key" '$1 == key"=" && $3 == "" { print $2; found=1; exit } END { if (!found) exit 1 }' "$file")" || return 1
+  validate_value "$key" "$value" || die_state "Unsafe Commission env value for $key in $file"
+  print -r -- "$value"
+}
+
+env_set() {
+  local file="$1" key="$2" value="$3"
+  local tmp="$file.tmp.$$"
+  allowed_key "$key" || die_state "Unknown Commission env key: $key"
+  validate_value "$key" "$value" || die_state "Unsafe Commission env value for $key"
+  validate_env_file "$file"
+  "$AWK" -v key="$key" -v value="$value" '
+    BEGIN { done=0 }
+    $0 ~ "^" key "=" { print key "='\''" value "'\''"; done=1; next }
+    { print }
+    END { if (!done) print key "='\''" value "'\''" }
+  ' "$file" > "$tmp"
+  "$MV" "$tmp" "$file"
+}
+
+repo_root() {
+  local root
+  root="$("$GIT" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$root" ]] && print -r -- "${root:A}" || print -r -- "${PWD:A}"
+}
+
+routing_key() {
+  print -r -- "${1:A}" | "$CKSUM" | "$AWK" '{ print $1 }'
+}
+
+active_session() { [[ -f "$ACTIVE_FILE" ]] || return 1; "$CAT" "$ACTIVE_FILE"; }
+session_file() { print -r -- "$SESSIONS_DIR/$1/session.env"; }
+run_file() { print -r -- "$SESSIONS_DIR/$1/runs/$2/run.env"; }
+cli_path() { print -r -- "$SCRIPT_PATH"; }
+
+require_active_session() {
+  local sid
+  sid="$(active_session)" || die "No active Commission session. Invoke $(skill_invocation commission) first."
+  [[ -f "$(session_file "$sid")" ]] || die_state "Active Commission session is missing session.env: $sid"
+  print -r -- "$sid"
+}
+
+capture_role() {
+  local role="$1"
+  "$GHOSTTY" capture-focused "$role" || die_transport "Ghostty capture failed for $role. Refresh the focused Ghostty pane and retry."
+}
+
+capture_value() {
+  local capture="$1" key="$2" value
+  value="$(print -r -- "$capture" | "$AWK" -F"'" -v key="$key" '$1 == key"=" && $3 == "" { print $2; found=1; exit } END { if (!found) exit 1 }')" || die_transport "Ghostty capture did not return $key"
+  print -r -- "$value"
+}
+
+has_required_section() {
+  local file="$1" label="$2"
+  "$AWK" -v label="$label" '
+    BEGIN { found=0 }
+    $0 ~ "^" label ":[[:space:]]*" { found=1 }
+    $0 ~ "^##[[:space:]]+" label "[[:space:]]*$" { found=1 }
+    END { exit found ? 0 : 1 }
+  ' "$file"
+}
+
+validate_consumer_prompt() {
+  local prompt="$1" missing=() section
+  for section in "Goal" "Target repo" "Slice" "Approved context" "Acceptance criteria" "In scope" "Out of scope" "Expected evidence"; do
+    has_required_section "$prompt" "$section" || missing+=("$section")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    print -r -- "Invalid Consumer prompt. Missing required section(s): ${(j:, :)missing}" >&2
+    print -r -- "Required: Goal, Target repo, Slice, Approved context, Acceptance criteria, In scope, Out of scope, Expected evidence." >&2
+    exit 1
+  fi
+}
+
+print_consumer_report_template() {
+  print -r -- "# Consumer Report"
+  print -r -- ""
+  print -r -- "Status: DONE | BLOCKED | NEEDS_CONTEXT"
+  print -r -- "Goal:"
+  print -r -- "Slice:"
+  print -r -- ""
+  print -r -- "## Acceptance Results"
+  print -r -- "- [criterion] PASS | FAIL | NOT VERIFIED - evidence or reason"
+  print -r -- ""
+  print -r -- "## Files Changed"
+  print -r -- ""
+  print -r -- "## Verification"
+  print -r -- "- Command:"
+  print -r -- "- Result:"
+  print -r -- ""
+  print -r -- "## Deviations"
+  print -r -- ""
+  print -r -- "## Residual Risks"
+}
+
+validate_consumer_report() {
+  local report="$1" missing=() section
+  has_required_section "$report" "Status" || missing+=("Status")
+  has_required_section "$report" "Goal" || missing+=("Goal")
+  has_required_section "$report" "Slice" || missing+=("Slice")
+  for section in "Acceptance Results" "Files Changed" "Verification" "Deviations" "Residual Risks"; do
+    has_required_section "$report" "$section" || missing+=("$section")
+  done
+  if (( ${#missing[@]} > 0 )); then
+    print -r -- "Invalid Consumer report. Missing required section(s): ${(j:, :)missing}" >&2
+    print_consumer_report_template >&2
+    exit 1
+  fi
+}
+
+write_pin_route() {
+  local p="$1" sid="$2" commissioner_root="$3" target_repo="$4"
+  "$MKDIR" -p "$ROUTING_DIR/pins"
+  {
+    print -r -- "COMMISSION_PIN='$p'"
+    print -r -- "COMMISSION_SESSION_ID='$sid'"
+    print -r -- "COMMISSION_COMMISSIONER_ROOT='$commissioner_root'"
+    print -r -- "COMMISSION_TARGET_REPO='$target_repo'"
+  } | safe_write "$ROUTING_DIR/pins/$p.env"
+}
+
+write_consumer_route() {
+  local entry="$1" sid="$2" commissioner_root="$3" target_repo="$4" key
+  key="$(routing_key "$entry")"
+  "$MKDIR" -p "$ROUTING_DIR/consumers"
+  {
+    print -r -- "COMMISSION_CONSUMER_ENTRY_CWD='$entry'"
+    print -r -- "COMMISSION_SESSION_ID='$sid'"
+    print -r -- "COMMISSION_COMMISSIONER_ROOT='$commissioner_root'"
+    print -r -- "COMMISSION_TARGET_REPO='$target_repo'"
+  } | safe_write "$ROUTING_DIR/consumers/$key.env"
+}
+
+start_commissioner() {
+  [[ -z "${1:-}" || "${1:-}" == "--new" ]] || die "Usage: commission commissioner start"
+  "$MKDIR" -p "$SESSIONS_DIR" "$STAGING_DIR"
+  local p sid sdir capture term target commissioner_root old sf
+  if old="$(active_session 2>/dev/null)" && [[ -f "$(session_file "$old")" ]]; then
+    env_set "$(session_file "$old")" COMMISSION_STATUS closed
+  fi
+  commissioner_root="${PWD:A}"
+  target="$(repo_root)"
+  p="$(pin)"
+  sid="$(session_id_for_pin "$p")"
+  sdir="$SESSIONS_DIR/$sid"
+  "$MKDIR" -p "$sdir/runs"
+  capture="$(capture_role commissioner)"
+  term="$(capture_value "$capture" COMMISSION_COMMISSIONER_TERMINAL_ID)"
+  {
+    print -r -- "COMMISSION_SESSION_ID='$sid'"
+    print -r -- "COMMISSION_PIN='$p'"
+    print -r -- "COMMISSION_STATUS='waiting_for_consumer'"
+    print -r -- "COMMISSION_ACTIVE_RUN=''"
+    print -r -- "COMMISSION_COMMISSIONER_ADAPTER='ghostty-macos'"
+    print -r -- "COMMISSION_COMMISSIONER_TERMINAL_ID='$term'"
+    print -r -- "COMMISSION_CONSUMER_ADAPTER=''"
+    print -r -- "COMMISSION_CONSUMER_TERMINAL_ID=''"
+    print -r -- "COMMISSION_COMMISSIONER_ROOT='$commissioner_root'"
+    print -r -- "COMMISSION_TARGET_REPO='$target'"
+    print -r -- "COMMISSION_CONSUMER_ENTRY_CWD=''"
+    print -r -- "COMMISSION_VERSION='$VERSION'"
+  } | safe_write "$sdir/session.env"
+  print -r -- "$sid" | safe_write "$ACTIVE_FILE"
+  write_pin_route "$p" "$sid" "$commissioner_root" "$target"
+  log_event "commissioner.start session=$sid pin=$p target=$target"
+  print -r -- "Commission session ready."
+  print -r -- "Target repo: $target"
+  print -r -- "Pin: $p"
+  print -r -- "In Consumer, invoke: $(skill_invocation commission-connect) $p"
+}
+
+next_run_id() {
+  local sid="$1" runs="$SESSIONS_DIR/$sid/runs" max=0 n d
+  "$MKDIR" -p "$runs"
+  for d in "$runs"/[0-9][0-9][0-9](N); do
+    n="${d:t}"
+    (( 10#$n > max )) && max="$((10#$n))"
+  done
+  printf "%03d\n" "$((max + 1))"
+}
+
+write_run_env() {
+  local sid="$1" rid="$2" next_status="$3" root="${PWD:A}" rdir="$SESSIONS_DIR/$sid/runs/$rid"
+  {
+    print -r -- "COMMISSION_RUN_ID='$rid'"
+    print -r -- "COMMISSION_RUN_STATUS='$next_status'"
+    print -r -- "COMMISSION_PROMPT_PATH='$root/$rdir/consumer-prompt.md'"
+    print -r -- "COMMISSION_REPORT_PATH='$root/$rdir/consumer-report.md'"
+    print -r -- "COMMISSION_REVIEW_PATH=''"
+    print -r -- "COMMISSION_CREATED_AT='$(now_ts)'"
+    print -r -- "COMMISSION_SENT_AT=''"
+    print -r -- "COMMISSION_REPORTED_AT=''"
+    print -r -- "COMMISSION_REVIEWED_AT=''"
+    print -r -- "COMMISSION_REVIEW_VERDICT=''"
+    print -r -- "COMMISSION_SUPERSEDED_BY=''"
+  } | safe_write "$rdir/run.env"
+}
+
+send_consumer() {
+  [[ "${1:-}" == "--prompt-file" ]] || die "Usage: commission commissioner send-consumer --prompt-file <path>"
+  local prompt="${2:-}" sid sf active active_env active_status rid rdir consumer_term next_status
+  [[ -f "$prompt" ]] || die "Missing prompt file: $prompt"
+  [[ "$prompt" == .commission/staging/* ]] || die "Prompt file must be under .commission/staging/"
+  validate_consumer_prompt "$prompt"
+  sid="$(require_active_session)"
+  sf="$(session_file "$sid")"
+  active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+  if [[ -n "$active" ]]; then
+    active_env="$SESSIONS_DIR/$sid/runs/$active/run.env"
+    active_status="$(env_get "$active_env" COMMISSION_RUN_STATUS || true)"
+    if [[ "$active_status" == "pending_consumer_connection" || "$active_status" == "sent_to_consumer" ]]; then
+      env_set "$active_env" COMMISSION_RUN_STATUS superseded
+    fi
+  fi
+  rid="$(next_run_id "$sid")"
+  if [[ -n "$active" && -f "$active_env" && "$(env_get "$active_env" COMMISSION_RUN_STATUS || true)" == "superseded" ]]; then
+    env_set "$active_env" COMMISSION_SUPERSEDED_BY "$rid"
+  fi
+  rdir="$SESSIONS_DIR/$sid/runs/$rid"
+  "$MKDIR" -p "$rdir"
+  "$CP" "$prompt" "$rdir/consumer-prompt.md.tmp.$$"
+  "$MV" "$rdir/consumer-prompt.md.tmp.$$" "$rdir/consumer-prompt.md"
+  "$RM" -f "$prompt"
+  next_status="pending_consumer_connection"
+  write_run_env "$sid" "$rid" "$next_status"
+  env_set "$sf" COMMISSION_ACTIVE_RUN "$rid"
+  env_set "$sf" COMMISSION_STATUS "$next_status"
+  consumer_term="$(env_get "$sf" COMMISSION_CONSUMER_TERMINAL_ID || true)"
+  if [[ -n "$consumer_term" ]]; then
+    "$GHOSTTY" send "$consumer_term" "Commissioner's Request: work in $(env_get "$sf" COMMISSION_TARGET_REPO). Read $PWD/$rdir/consumer-prompt.md. When done, write $PWD/$rdir/consumer-report.md, then run $(cli_path) consumer notify." >/dev/null || die_transport "Failed to wake Consumer. Reconnect Consumer and retry."
+    env_set "$rdir/run.env" COMMISSION_RUN_STATUS sent_to_consumer
+    env_set "$rdir/run.env" COMMISSION_SENT_AT "$(now_ts)"
+    env_set "$sf" COMMISSION_STATUS sent_to_consumer
+    print -r -- "Passing this to the consumer..."
+  else
+    print -r -- "Consumer is not connected."
+    print -r -- "Run: $rid"
+    print -r -- "Pin: $(env_get "$sf" COMMISSION_PIN)"
+  fi
+  if [[ -n "$active" ]]; then
+    print -r -- "Previous active run superseded: $active"
+  fi
+  return 0
+}
+
+write_consumer_brief_once() {
+  local sid="$1" root="$2" brief="$root/$SESSIONS_DIR/$sid/consumer-brief.md" tmp
+  [[ -f "$brief" ]] && return
+  {
+    print -r -- "# Commission Consumer Brief"
+    print -r -- ""
+    print -r -- "Implement only in the target repo printed by connect."
+    print -r -- "Consumer entry cwd is only a routing anchor for reconnect and notify."
+    print -r -- "Write consumer-report.md using the acceptance template, then run $(cli_path) consumer notify."
+  } | safe_write "$brief"
+}
+
+connect_consumer() {
+  local p="${1:-}" replace="${2:-}" route sf root target sid entry capture term existing commissioner_term active active_env active_status
+  [[ -n "$p" ]] || die "Usage: commission consumer connect <pin> [--replace]"
+  route="$ROUTING_DIR/pins/$p.env"
+  [[ -f "$route" ]] || die "No Commission route for pin $p. Ask Commissioner for a fresh pin."
+  validate_env_file "$route"
+  sid="$(env_get "$route" COMMISSION_SESSION_ID)"
+  root="$(env_get "$route" COMMISSION_COMMISSIONER_ROOT)"
+  target="$(env_get "$route" COMMISSION_TARGET_REPO)"
+  entry="${PWD:A}"
+  sf="$root/$SESSIONS_DIR/$sid/session.env"
+  [[ -f "$sf" ]] || die_state "Commission route points to missing session: $sf"
+  existing="$(env_get "$sf" COMMISSION_CONSUMER_TERMINAL_ID || true)"
+  active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+  active_status=""
+  if [[ -n "$active" ]]; then
+    active_env="$root/$SESSIONS_DIR/$sid/runs/$active/run.env"
+    [[ -f "$active_env" ]] && active_status="$(env_get "$active_env" COMMISSION_RUN_STATUS || true)"
+  fi
+  if [[ -n "$existing" && "$replace" != "--replace" ]]; then
+    case "$active_status" in
+      pending_consumer_connection|sent_to_consumer) die "Consumer already connected for active run $active. Run: $(skill_invocation commission-connect) $p --replace" ;;
+    esac
+  fi
+  capture="$(capture_role consumer)"
+  term="$(capture_value "$capture" COMMISSION_CONSUMER_TERMINAL_ID)"
+  commissioner_term="$(env_get "$sf" COMMISSION_COMMISSIONER_TERMINAL_ID || true)"
+  [[ -z "$commissioner_term" || "$commissioner_term" != "$term" ]] || die_transport "Captured Consumer transport matches Commissioner transport. Focus the Consumer Ghostty pane and reconnect."
+  env_set "$sf" COMMISSION_CONSUMER_ADAPTER ghostty-macos
+  env_set "$sf" COMMISSION_CONSUMER_TERMINAL_ID "$term"
+  env_set "$sf" COMMISSION_CONSUMER_ENTRY_CWD "$entry"
+  write_consumer_route "$entry" "$sid" "$root" "$target"
+  write_consumer_brief_once "$sid" "$root"
+  [[ -n "$commissioner_term" ]] && "$GHOSTTY" send "$commissioner_term" "Consumer connected and ready. Target repo: $target" >/dev/null || true
+  print -r -- "Connected to Commission session $p."
+  print -r -- "Target repo: $target"
+  case "$active_status" in
+    pending_consumer_connection|sent_to_consumer)
+      print -r -- "Pending Commissioner's Request: $root/$SESSIONS_DIR/$sid/runs/$active/consumer-prompt.md" ;;
+  esac
+  [[ -n "$active" ]] && print -r -- "Write Consumer report: $root/$SESSIONS_DIR/$sid/runs/$active/consumer-report.md"
+  print -r -- "Notify command: $(cli_path) consumer notify"
+}
+
+resolve_notify_root() {
+  local key route sid root
+  key="$(routing_key "${PWD:A}")"
+  route="$ROUTING_DIR/consumers/$key.env"
+  if [[ -f "$route" ]]; then
+    validate_env_file "$route"
+    print -r -- "$(env_get "$route" COMMISSION_COMMISSIONER_ROOT)"
+    return
+  fi
+  if [[ -f "$ACTIVE_FILE" ]]; then
+    print -r -- "${PWD:A}"
+    return
+  fi
+  die "No Consumer route for this directory. Reconnect with $(skill_invocation commission-connect) <pin>."
+}
+
+notify_consumer() {
+  local root sid sf active rdir report commissioner_term consumer_term
+  root="$(resolve_notify_root)"
+  sid="$("$CAT" "$root/$ACTIVE_FILE")"
+  sf="$root/$SESSIONS_DIR/$sid/session.env"
+  active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+  [[ -n "$active" ]] || die "No active run to notify."
+  rdir="$root/$SESSIONS_DIR/$sid/runs/$active"
+  report="$rdir/consumer-report.md"
+  [[ -f "$report" ]] || {
+    print -r -- "Cannot notify Commissioner yet." >&2
+    print -r -- "Missing: $report" >&2
+    print_consumer_report_template >&2
+    exit 1
+  }
+  validate_consumer_report "$report"
+  commissioner_term="$(env_get "$sf" COMMISSION_COMMISSIONER_TERMINAL_ID || true)"
+  consumer_term="$(env_get "$sf" COMMISSION_CONSUMER_TERMINAL_ID || true)"
+  [[ -n "$commissioner_term" ]] || die_transport "Commissioner transport is missing. Ask Commissioner to refresh."
+  [[ -z "$consumer_term" || "$commissioner_term" != "$consumer_term" ]] || die_transport "Commissioner and Consumer terminal ids match. Ask Commissioner to refresh."
+  "$GHOSTTY" send "$commissioner_term" "Consumer's Report: read $report. Review against the request, accepted context, evidence, and target repo state before approving or passing back." >/dev/null || die_transport "Failed to wake Commissioner. Ask Commissioner to refresh."
+  env_set "$rdir/run.env" COMMISSION_RUN_STATUS reported
+  env_set "$rdir/run.env" COMMISSION_REPORTED_AT "$(now_ts)"
+  env_set "$sf" COMMISSION_STATUS reported
+  print -r -- "Consumer's Report sent."
+}
+
+review_run() {
+  local verdict="" review_file="" normalized sid sf active rdir
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --verdict) verdict="${2:-}"; shift 2 ;;
+      --review-file) review_file="${2:-}"; shift 2 ;;
+      *) die "Usage: commission commissioner review --verdict accepted|accepted-with-notes|passed-back|blocked --review-file <path>" ;;
+    esac
+  done
+  [[ -n "$verdict" && -n "$review_file" ]] || die "Usage: commission commissioner review --verdict accepted|accepted-with-notes|passed-back|blocked --review-file <path>"
+  [[ -f "$review_file" ]] || die "Missing review file: $review_file"
+  [[ "$review_file" == .commission/staging/* ]] || die "Review file must be under .commission/staging/"
+  case "$verdict" in
+    accepted) normalized="accepted" ;;
+    accepted-with-notes|accepted_with_notes) normalized="accepted_with_notes" ;;
+    passed-back|passed_back) normalized="passed_back" ;;
+    blocked) normalized="blocked" ;;
+    *) die "Unknown review verdict: $verdict" ;;
+  esac
+  sid="$(require_active_session)"
+  sf="$(session_file "$sid")"
+  active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+  [[ -n "$active" ]] || die "No active run to review."
+  rdir="$SESSIONS_DIR/$sid/runs/$active"
+  "$CP" "$review_file" "$rdir/commissioner-review.md.tmp.$$"
+  "$MV" "$rdir/commissioner-review.md.tmp.$$" "$rdir/commissioner-review.md"
+  "$RM" -f "$review_file"
+  env_set "$rdir/run.env" COMMISSION_RUN_STATUS "$normalized"
+  env_set "$rdir/run.env" COMMISSION_REVIEW_VERDICT "$normalized"
+  env_set "$rdir/run.env" COMMISSION_REVIEW_PATH "$PWD/$rdir/commissioner-review.md"
+  env_set "$rdir/run.env" COMMISSION_REVIEWED_AT "$(now_ts)"
+  env_set "$sf" COMMISSION_STATUS "$normalized"
+  print -r -- "Commissioner review recorded."
+  print -r -- "Run: $active"
+  print -r -- "Verdict: $normalized"
+}
+
+present_or_absent() { [[ -n "$1" ]] && print -r -- "$1" || print -r -- "absent"; }
+
+status_cmd() {
+  local sid sf active session_status target consumer run_status=""
+  if ! sid="$(active_session 2>/dev/null)"; then
+    print -r -- "No active Commission session."
+    return
+  fi
+  sf="$(session_file "$sid")"
+  [[ -f "$sf" ]] || die_state "Active session missing: $sid"
+  active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+  session_status="$(env_get "$sf" COMMISSION_STATUS || true)"
+  target="$(env_get "$sf" COMMISSION_TARGET_REPO || true)"
+  consumer="$(env_get "$sf" COMMISSION_CONSUMER_TERMINAL_ID || true)"
+  [[ -n "$active" && -f "$(run_file "$sid" "$active")" ]] && run_status="$(env_get "$(run_file "$sid" "$active")" COMMISSION_RUN_STATUS || true)"
+  print -r -- "Commission session: $sid"
+  print -r -- "Root: $PWD"
+  print -r -- "Target repo: $target"
+  print -r -- "Status: $session_status"
+  [[ -n "$consumer" ]] && print -r -- "Consumer: connected" || print -r -- "Consumer: not connected"
+  print -r -- "Active run: $active"
+  [[ -n "$run_status" ]] && print -r -- "Run status: $run_status"
+}
+
+doctor_cmd() {
+  if [[ "${1:-}" == "ghostty" ]]; then
+    shift
+    doctor_ghostty "$@"
+    return
+  fi
+  [[ -z "${1:-}" ]] || die "Usage: commission doctor [ghostty commissioner|consumer]"
+  local sid="" sf="" active="" session_status="" target="" pin_value="" run_status="" marker_version="" marker_source=""
+  if sid="$(active_session 2>/dev/null)"; then
+    sf="$(session_file "$sid")"
+    if [[ -f "$sf" ]]; then
+      pin_value="$(env_get "$sf" COMMISSION_PIN || true)"
+      session_status="$(env_get "$sf" COMMISSION_STATUS || true)"
+      target="$(env_get "$sf" COMMISSION_TARGET_REPO || true)"
+      active="$(env_get "$sf" COMMISSION_ACTIVE_RUN || true)"
+      [[ -n "$active" && -f "$(run_file "$sid" "$active")" ]] && run_status="$(env_get "$(run_file "$sid" "$active")" COMMISSION_RUN_STATUS || true)"
+    fi
+  fi
+  if [[ -f "$GLOBAL_MARKER" ]]; then
+    marker_version="$(env_get "$GLOBAL_MARKER" COMMISSION_VERSION || true)"
+    marker_source="$(env_get "$GLOBAL_MARKER" COMMISSION_SOURCE || true)"
+  fi
+  print -r -- "Commission doctor"
+  print -r -- "cli.version: $VERSION"
+  print -r -- "cwd: $PWD"
+  [[ -d "$COMMISSION_DIR" ]] && print -r -- "commission.dir: present ($PWD/$COMMISSION_DIR)" || print -r -- "commission.dir: missing ($PWD/$COMMISSION_DIR)"
+  print -r -- "routing.dir: $ROUTING_DIR"
+  print -r -- "session.id: $(present_or_absent "$sid")"
+  print -r -- "session.pin: $(present_or_absent "$pin_value")"
+  print -r -- "session.status: $(present_or_absent "$session_status")"
+  print -r -- "target.repo: $(present_or_absent "$target")"
+  print -r -- "run.id: $(present_or_absent "$active")"
+  print -r -- "run.status: $(present_or_absent "$run_status")"
+  if [[ -f "$GLOBAL_MARKER" ]]; then
+    print -r -- "global.marker: present ($GLOBAL_MARKER)"
+    print -r -- "global.version: $(present_or_absent "$marker_version")"
+    print -r -- "global.source: $(present_or_absent "$marker_source")"
+  else
+    print -r -- "global.marker: missing ($GLOBAL_MARKER)"
+    print -r -- "global.version: absent"
+  fi
+  [[ -x "$GHOSTTY" ]] && print -r -- "ghostty.adapter: executable ($GHOSTTY)" || print -r -- "ghostty.adapter: not executable ($GHOSTTY)"
+}
+
+doctor_ghostty() {
+  local role="${1:-}" capture code
+  [[ "$role" == "commissioner" || "$role" == "consumer" ]] || die "Usage: commission doctor ghostty commissioner|consumer"
+  set +e
+  capture="$("$GHOSTTY" capture-focused "$role" 2>&1)"
+  code="$?"
+  set -e
+  print -r -- "Commission doctor ghostty"
+  print -r -- "role: $role"
+  print -r -- "adapter.path: $GHOSTTY"
+  print -r -- "dry_run: ${ADL_GHOSTTY_DRY_RUN:-0}"
+  if [[ "$code" == "0" ]]; then
+    print -r -- "capture: ok"
+    print -r -- "$capture"
+  else
+    print -r -- "capture: failed"
+    print -r -- "exit_code: $code"
+    print -r -- "error: $capture"
+    exit 3
+  fi
+}
+
+case "${1:-}" in
+  commissioner)
+    shift
+    case "${1:-}" in
+      start) shift; start_commissioner "$@" ;;
+      send-consumer) shift; send_consumer "$@" ;;
+      review) shift; review_run "$@" ;;
+      *) die "Usage: commission commissioner start | send-consumer --prompt-file <path> | review --verdict <verdict> --review-file <path>" ;;
+    esac ;;
+  consumer)
+    shift
+    case "${1:-}" in
+      connect) shift; connect_consumer "$@" ;;
+      notify) notify_consumer ;;
+      status) status_cmd ;;
+      *) die "Usage: commission consumer connect <pin> [--replace] | notify | status" ;;
+    esac ;;
+  status) status_cmd ;;
+  doctor) shift; doctor_cmd "$@" ;;
+  *) die "Usage: commission commissioner ... | consumer ... | status | doctor [ghostty commissioner|consumer]" ;;
+esac
