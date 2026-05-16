@@ -26,10 +26,6 @@ That means:
 
 Developer reports, changed files, and passing tests are evidence. They are not approval. Architect approval is a human review verdict for the active slice.
 
-## Commission Protocol
-
-Commission is the sibling protocol for Commissioner-Consumer work. It keeps the same CLI-authority model, but changes the state boundary: the Commissioner's current working directory owns `.commission/`, while the Consumer may connect and work from a different repository. Requests, reports, reviews, and logs are stored in the Commissioner's `.commission/` tree; the routing index under the user's home directory stores only pointers needed to reconnect pins and Consumer working directories.
-
 ## Current Support
 
 ADL V1 targets:
@@ -102,9 +98,6 @@ Invoke the installed Architect skill from the repository you want ADL to manage.
 | Resume existing Architect session state | `$adl resume` | `/adl resume` | `adl architect resume` |
 | Set this pane as Architect for the active session | `$adl refresh` | `/adl refresh` | `adl architect refresh` |
 | Reset local ADL state | `$adl-reset` | `/adl-reset` | `adl-reset "$PWD/.adl"` |
-| Start a fresh Commissioner session | `$commission` | `/commission` | `commission commissioner start` |
-| Connect Consumer, including from another repo | `$commission-connect <pin>` | `/commission-connect <pin>` | `commission consumer connect <pin>` |
-| Clear local Commission state | `$commission-clear` | `/commission-clear` | `commission-clear "$PWD/.commission"` |
 
 Plain `$adl` starts fresh on purpose. Use resume only when you explicitly want to reuse the existing `.adl/` session, active run, reports, and pin.
 
@@ -173,14 +166,6 @@ adl-reset "$PWD/.adl"
 ```
 
 `adl doctor` is read-only. `adl-reset` removes only the current working directory's `.adl/` directory so the next `$adl` starts clean.
-
-For Commission diagnostics and cleanup:
-
-```sh
-commission status
-commission doctor
-commission-clear "$PWD/.commission"
-```
 
 ## Repository Layout
 

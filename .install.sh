@@ -53,8 +53,6 @@ require_file() {
 
 require_file "$ROOT/scripts/adl"
 require_file "$ROOT/scripts/adl-reset"
-require_file "$ROOT/scripts/commission"
-require_file "$ROOT/scripts/commission-clear"
 require_file "$ROOT/scripts/ghostty-macos"
 
 bumped_version() {
@@ -111,18 +109,12 @@ install_runtime() {
   local adl_target="$skills_dir/adl"
   local reset_target="$skills_dir/adl-reset"
   local connect_target="$skills_dir/adl-connect"
-  local commission_target="$skills_dir/commission"
-  local commission_clear_target="$skills_dir/commission-clear"
-  local commission_connect_target="$skills_dir/commission-connect"
   local backup_root="$skills_dir/.adl-project-backups"
   local marker="$adl_target/.adl-framework"
 
   require_file "$source_skills_dir/adl/SKILL.md"
   require_file "$source_skills_dir/adl-reset/SKILL.md"
   require_file "$source_skills_dir/adl-connect/SKILL.md"
-  require_file "$source_skills_dir/commission/SKILL.md"
-  require_file "$source_skills_dir/commission-clear/SKILL.md"
-  require_file "$source_skills_dir/commission-connect/SKILL.md"
 
   "$MKDIR" -p "$skills_dir"
 
@@ -136,46 +128,27 @@ install_runtime() {
     print -r -- "Rollback: \"$RM\" -rf '$adl_target' && \"$CP\" -R '$backup' '$adl_target'"
   fi
 
-  "$RM" -rf "$adl_target" "$skills_dir/adl-clear" "$reset_target" "$connect_target" "$commission_target" "$commission_clear_target" "$commission_connect_target"
+  "$RM" -rf "$adl_target" "$skills_dir/adl-clear" "$reset_target" "$connect_target"
   "$MKDIR" -p "$adl_target/scripts" "$connect_target"
   "$MKDIR" -p "$reset_target/scripts"
-  "$MKDIR" -p "$commission_target/scripts" "$commission_connect_target"
-  "$MKDIR" -p "$commission_clear_target/scripts"
 
   "$CP" "$source_skills_dir/adl/SKILL.md" "$adl_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-reset/SKILL.md" "$reset_target/SKILL.md"
   "$CP" "$source_skills_dir/adl-connect/SKILL.md" "$connect_target/SKILL.md"
-  "$CP" "$source_skills_dir/commission/SKILL.md" "$commission_target/SKILL.md"
-  "$CP" "$source_skills_dir/commission-clear/SKILL.md" "$commission_clear_target/SKILL.md"
-  "$CP" "$source_skills_dir/commission-connect/SKILL.md" "$commission_connect_target/SKILL.md"
   render_skill_template "$adl_target/SKILL.md" "$skills_dir"
   render_skill_template "$reset_target/SKILL.md" "$skills_dir"
   render_skill_template "$connect_target/SKILL.md" "$skills_dir"
-  render_skill_template "$commission_target/SKILL.md" "$skills_dir"
-  render_skill_template "$commission_clear_target/SKILL.md" "$skills_dir"
-  render_skill_template "$commission_connect_target/SKILL.md" "$skills_dir"
   "$CP" "$ROOT/scripts/adl" "$adl_target/scripts/adl"
   "$CP" "$ROOT/VERSION" "$adl_target/VERSION"
   "$CP" "$ROOT/scripts/adl-reset" "$reset_target/scripts/adl-reset"
-  "$CP" "$ROOT/scripts/commission" "$commission_target/scripts/commission"
-  "$CP" "$ROOT/VERSION" "$commission_target/VERSION"
-  "$CP" "$ROOT/scripts/commission-clear" "$commission_clear_target/scripts/commission-clear"
   "$CP" "$ROOT/scripts/ghostty-macos" "$adl_target/scripts/ghostty-macos"
-  "$CP" "$ROOT/scripts/ghostty-macos" "$commission_target/scripts/ghostty-macos"
   "$CHMOD" +x "$adl_target/scripts/adl" "$adl_target/scripts/ghostty-macos"
   "$CHMOD" +x "$reset_target/scripts/adl-reset"
-  "$CHMOD" +x "$commission_target/scripts/commission" "$commission_target/scripts/ghostty-macos"
-  "$CHMOD" +x "$commission_clear_target/scripts/commission-clear"
 
   {
     print -r -- "ADL_VERSION='$VERSION'"
     print -r -- "ADL_SOURCE='$ROOT'"
   } > "$marker"
-
-  {
-    print -r -- "COMMISSION_VERSION='$VERSION'"
-    print -r -- "COMMISSION_SOURCE='$ROOT'"
-  } > "$commission_target/.commission-framework"
 
   print -r -- "Installed $runtime_label $VERSION into $skills_dir"
 }
