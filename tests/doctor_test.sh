@@ -74,3 +74,22 @@ assert_contains "$ghostty_arch" "ADL_ARCHITECT_TERMINAL_ID='dry-run-architect-te
 
 ghostty_dev="$("$ROOT/scripts/adl" doctor ghostty dev)"
 assert_contains "$ghostty_dev" "ADL_DEV_TERMINAL_ID='dry-run-dev-terminal'" "ghostty doctor should include dev capture output"
+
+export COMMISSION_SCRIPT_ROOT="$ROOT/scripts"
+export COMMISSION_ROUTING_DIR="$TMP/commission-routing"
+export COMMISSION_CODEX_SKILLS_DIR="$TMP/commission-skills"
+mkdir -p "$COMMISSION_CODEX_SKILLS_DIR/commission"
+/bin/cat > "$COMMISSION_CODEX_SKILLS_DIR/commission/.commission-framework" <<MARKER
+COMMISSION_VERSION='8.8.8'
+COMMISSION_SOURCE='$ROOT'
+MARKER
+
+cd "$TMP"
+commission_doctor="$("$ROOT/scripts/commission" doctor)"
+assert_contains "$commission_doctor" "Commission doctor" "commission doctor should print heading"
+assert_contains "$commission_doctor" "global.marker: present ($COMMISSION_CODEX_SKILLS_DIR/commission/.commission-framework)" "commission doctor should report marker path"
+assert_contains "$commission_doctor" "global.version: 8.8.8" "commission doctor should report installed commission version"
+
+commission_ghostty="$("$ROOT/scripts/commission" doctor ghostty commissioner)"
+assert_contains "$commission_ghostty" "Commission doctor ghostty" "commission ghostty doctor should print heading"
+assert_contains "$commission_ghostty" "COMMISSION_COMMISSIONER_TERMINAL_ID='dry-run-commissioner-terminal'" "commission ghostty doctor should include commissioner capture"

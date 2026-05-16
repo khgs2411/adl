@@ -10,12 +10,24 @@ connect_skill_text="$(cat "$ROOT/skills/adl-connect/SKILL.md")"
 claude_skill_text="$(cat "$ROOT/skills-claude/adl/SKILL.md")"
 claude_reset_skill_text="$(cat "$ROOT/skills-claude/adl-reset/SKILL.md")"
 claude_connect_skill_text="$(cat "$ROOT/skills-claude/adl-connect/SKILL.md")"
+commission_skill_text="$(cat "$ROOT/skills/commission/SKILL.md")"
+commission_connect_skill_text="$(cat "$ROOT/skills/commission-connect/SKILL.md")"
+commission_reset_skill_text="$(cat "$ROOT/skills/commission-reset/SKILL.md")"
+claude_commission_skill_text="$(cat "$ROOT/skills-claude/commission/SKILL.md")"
+claude_commission_connect_skill_text="$(cat "$ROOT/skills-claude/commission-connect/SKILL.md")"
+claude_commission_reset_skill_text="$(cat "$ROOT/skills-claude/commission-reset/SKILL.md")"
 all_skill_text="$skill_text
 $reset_skill_text
 $connect_skill_text
 $claude_skill_text
 $claude_reset_skill_text
-$claude_connect_skill_text"
+$claude_connect_skill_text
+$commission_skill_text
+$commission_connect_skill_text
+$commission_reset_skill_text
+$claude_commission_skill_text
+$claude_commission_connect_skill_text
+$claude_commission_reset_skill_text"
 
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.codex/skills" "source skill templates should not contain maintainer-local Codex paths"
 assert_not_contains "$all_skill_text" "/Users/liadgoren/.claude/skills" "source skill templates should not contain maintainer-local Claude paths"
@@ -107,3 +119,16 @@ assert_contains "$claude_connect_skill_text" "Claude Code" "Claude Dev connect s
 assert_contains "$claude_connect_skill_text" "{{ADL_SKILLS_DIR}}/adl/scripts/adl" "Claude Dev connect skill should use install path token"
 assert_contains "$claude_connect_skill_text" "When invoked as \`/adl-connect <pin>\`" "Claude Dev connect skill should use slash invocation language"
 assert_not_contains "$claude_connect_skill_text" 'When invoked as `$adl-connect <pin>`' "Claude Dev connect skill should not use Codex dollar skill language"
+assert_contains "$commission_skill_text" "{{ADL_SKILLS_DIR}}/commission/scripts/commission" "Codex Commission template should use install path token"
+assert_contains "$commission_connect_skill_text" "use the printed \`Target repo\` as the authoritative repository" "Commission connect should make target repo authoritative"
+assert_contains "$commission_connect_skill_text" "Consumer entry cwd is only a routing anchor" "Commission connect should describe entry cwd routing"
+assert_contains "$commission_connect_skill_text" "according to that repo's own instructions and operating model" "Commission connect should preserve target repo operating model"
+assert_contains "$commission_connect_skill_text" "does not decide whether the target repo expects direct implementation" "Commission connect should not default to direct implementation"
+assert_contains "$commission_connect_skill_text" "orchestrator repo may require creating or updating a work card" "Commission connect should cover orchestrator repos without making them mandatory"
+assert_not_contains "$commission_connect_skill_text" "implement only its scope in the target repo" "Commission connect should not tell Consumer to directly implement by default"
+assert_contains "$commission_reset_skill_text" '{{ADL_SKILLS_DIR}}/commission-reset/scripts/commission-reset "$PWD/.commission"' "Commission reset should pass cwd .commission"
+assert_contains "$claude_commission_skill_text" "/commission-connect <pin>" "Claude Commission skill should use slash connect language"
+assert_contains "$claude_commission_connect_skill_text" "Claude Code" "Claude Commission connect should name Claude Code"
+assert_contains "$claude_commission_connect_skill_text" "according to that repo's own instructions and operating model" "Claude Commission connect should preserve target repo operating model"
+assert_not_contains "$claude_commission_connect_skill_text" "implement only its scope in the target repo" "Claude Commission connect should not tell Consumer to directly implement by default"
+assert_contains "$claude_commission_reset_skill_text" 'When invoked as `/commission-reset`' "Claude Commission reset should use slash invocation"

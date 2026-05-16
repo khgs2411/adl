@@ -49,10 +49,10 @@ skill_invocation() {
 }
 
 safe_write() {
-  local path="$1"
-  local tmp="$path.tmp.$$"
+  local output_file="$1"
+  local tmp="$output_file.tmp.$$"
   "$CAT" > "$tmp"
-  "$MV" "$tmp" "$path"
+  "$MV" "$tmp" "$output_file"
 }
 
 allowed_key() {

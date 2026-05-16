@@ -4,7 +4,7 @@
 
 **Goal:** Add a Commission protocol where a Consumer can start in another directory but must implement the Commissioner's request in the Commissioner's target repository.
 
-**Architecture:** Add a separate `commission` CLI parallel to `adl`; `.commission/` lives in the Commissioner target repo, while `~/.commission/` stores only routing pointers. Consumer connect resolves the pin to the Commissioner root first, prints the target repo, and records Consumer entry cwd only for reconnect/notify routing.
+**Architecture:** Add a separate `commission` CLI parallel to `adl`; `.commission/` lives in the Commissioner target repo, while `~/.commission/` stores only routing pointers. Tests may override the global routing root with `COMMISSION_ROUTING_DIR`. Consumer connect resolves the pin to the Commissioner root first, prints the target repo, and records Consumer entry cwd only for reconnect/notify routing.
 
 **Tech Stack:** zsh scripts, Ghostty macOS adapter, Codex and Claude skill templates, shell integration tests.
 
@@ -19,6 +19,8 @@
 - Create `skills/commission/SKILL.md`, `skills/commission-connect/SKILL.md`, `skills/commission-reset/SKILL.md`.
 - Create `skills-claude/commission/SKILL.md`, `skills-claude/commission-connect/SKILL.md`, `skills-claude/commission-reset/SKILL.md`.
 - Create `tests/commission_state_test.sh`: target-repo and cross-directory behavior.
+- Create `tests/commission_reset_test.sh`: reset safety and route cleanup behavior.
+- Modify `tests/doctor_test.sh`: Commission diagnostics and installed-marker path behavior.
 - Modify `tests/install_test.sh`: install assertions and collision backup assertions.
 - Modify `tests/skill_text_test.sh`: source skill text assertions.
 - Modify `tests/ghostty_adapter_test.sh`: new role assertions.
@@ -56,10 +58,14 @@ COMMISSION_SESSION_ID='<session-id>'
 COMMISSION_PIN='<pin>'
 COMMISSION_STATUS='waiting_for_consumer'
 COMMISSION_ACTIVE_RUN=''
+COMMISSION_COMMISSIONER_ADAPTER='ghostty-macos'
 COMMISSION_COMMISSIONER_TERMINAL_ID='<terminal-id>'
+COMMISSION_CONSUMER_ADAPTER=''
 COMMISSION_CONSUMER_TERMINAL_ID=''
+COMMISSION_COMMISSIONER_ROOT='<absolute-team-a-root>'
 COMMISSION_TARGET_REPO='<absolute-team-a-git-root-or-cwd>'
 COMMISSION_CONSUMER_ENTRY_CWD=''
+COMMISSION_VERSION='<version>'
 ```
 
 Run file:
@@ -71,8 +77,15 @@ COMMISSION_RUN_STATUS='pending_consumer_connection'
 COMMISSION_PROMPT_PATH='<absolute-team-a-root>/.commission/sessions/<session-id>/runs/<run-id>/consumer-prompt.md'
 COMMISSION_REPORT_PATH='<absolute-team-a-root>/.commission/sessions/<session-id>/runs/<run-id>/consumer-report.md'
 COMMISSION_REVIEW_PATH=''
+COMMISSION_CREATED_AT='<timestamp>'
+COMMISSION_SENT_AT=''
+COMMISSION_REPORTED_AT=''
+COMMISSION_REVIEWED_AT=''
+COMMISSION_REVIEW_VERDICT=''
 COMMISSION_SUPERSEDED_BY=''
 ```
+
+The implementation may write these additional validated env keys when needed for transport, diagnostics, timestamps, and install metadata: `COMMISSION_COMMISSIONER_ADAPTER`, `COMMISSION_CONSUMER_ADAPTER`, `COMMISSION_CREATED_AT`, `COMMISSION_SENT_AT`, `COMMISSION_REPORTED_AT`, `COMMISSION_REVIEWED_AT`, `COMMISSION_REVIEW_VERDICT`, `COMMISSION_VERSION`, and `COMMISSION_SOURCE`.
 
 `<consumer-entry-key>` is the first field from:
 
@@ -123,8 +136,8 @@ export COMMISSION_SCRIPT_ROOT="$ROOT/scripts"
 export COMMISSION_ROUTING_DIR="$ROUTING"
 
 write_request() {
-  local path="$1"
-  /bin/cat > "$path" <<REQUEST
+  local request_file="$1"
+  /bin/cat > "$request_file" <<REQUEST
 Goal: Add checklist support to Team A todo app
 Target repo: $TEAM_A
 Slice: Add the minimal checklist model
@@ -192,16 +205,25 @@ COMMISSION_SESSION_ID
 COMMISSION_PIN
 COMMISSION_STATUS
 COMMISSION_ACTIVE_RUN
+COMMISSION_COMMISSIONER_ADAPTER
 COMMISSION_COMMISSIONER_TERMINAL_ID
+COMMISSION_CONSUMER_ADAPTER
 COMMISSION_CONSUMER_TERMINAL_ID
 COMMISSION_COMMISSIONER_ROOT
 COMMISSION_TARGET_REPO
 COMMISSION_CONSUMER_ENTRY_CWD
+COMMISSION_VERSION
+COMMISSION_SOURCE
 COMMISSION_RUN_ID
 COMMISSION_RUN_STATUS
 COMMISSION_PROMPT_PATH
 COMMISSION_REPORT_PATH
 COMMISSION_REVIEW_PATH
+COMMISSION_CREATED_AT
+COMMISSION_SENT_AT
+COMMISSION_REPORTED_AT
+COMMISSION_REVIEWED_AT
+COMMISSION_REVIEW_VERDICT
 COMMISSION_SUPERSEDED_BY
 ```
 
@@ -254,6 +276,15 @@ Write Consumer report: <absolute-report-path>
 Notify with: <absolute-commission-cli-path> consumer notify
 ```
 
+Before writing the Consumer route or mutating session state, compare the captured Consumer terminal ID with the stored `COMMISSION_COMMISSIONER_TERMINAL_ID`. If both IDs are non-empty and equal, fail without changing state and print a refresh instruction:
+
+```text
+Consumer and Commissioner were captured as the same Ghostty terminal.
+Refresh the Consumer terminal focus and run $commission-connect <pin> again.
+```
+
+Add a focused assertion in `tests/commission_state_test.sh` by overriding the dry-run Consumer terminal to match the Commissioner terminal, then verify `consumer connect` exits non-zero, prints the refresh instruction, and leaves `COMMISSION_CONSUMER_TERMINAL_ID` empty in `session.env`.
+
 - [ ] **Step 5: Run target routing test**
 
 Run: `rtk tests/commission_state_test.sh`
@@ -266,6 +297,8 @@ Expected: passes through connect assertions, then may fail later if notify is no
 - Modify: `scripts/commission`
 - Create: `scripts/commission-reset`
 - Test: `tests/commission_state_test.sh`
+- Test: `tests/commission_reset_test.sh`
+- Test: `tests/doctor_test.sh`
 
 - [ ] **Step 1: Extend test for notify from Team B with valid local `.commission/`**
 
@@ -274,15 +307,19 @@ Append:
 ```zsh
 mkdir -p "$TEAM_B/.commission/sessions/local/runs/001"
 print -r -- "local" > "$TEAM_B/.commission/active-session"
-/bin/cat > "$TEAM_B/.commission/sessions/local/session.env" <<'LOCAL'
+/bin/cat > "$TEAM_B/.commission/sessions/local/session.env" <<LOCAL
 COMMISSION_SESSION_ID='local'
 COMMISSION_PIN='999999'
 COMMISSION_STATUS='sent_to_consumer'
 COMMISSION_ACTIVE_RUN='001'
+COMMISSION_COMMISSIONER_ADAPTER='ghostty-macos'
 COMMISSION_COMMISSIONER_TERMINAL_ID='team-b-local-terminal'
+COMMISSION_CONSUMER_ADAPTER=''
 COMMISSION_CONSUMER_TERMINAL_ID=''
+COMMISSION_COMMISSIONER_ROOT='$TEAM_B'
 COMMISSION_TARGET_REPO='/tmp/team-b-should-not-be-used'
 COMMISSION_CONSUMER_ENTRY_CWD=''
+COMMISSION_VERSION='test'
 LOCAL
 /bin/cat > "$TEAM_B/.commission/sessions/local/runs/001/run.env" <<'LOCALRUN'
 COMMISSION_RUN_ID='001'
@@ -290,6 +327,11 @@ COMMISSION_RUN_STATUS='sent_to_consumer'
 COMMISSION_PROMPT_PATH='/tmp/team-b-should-not-be-used/.commission/sessions/local/runs/001/consumer-prompt.md'
 COMMISSION_REPORT_PATH='/tmp/team-b-should-not-be-used/.commission/sessions/local/runs/001/consumer-report.md'
 COMMISSION_REVIEW_PATH=''
+COMMISSION_CREATED_AT='2026-05-16T00:00:00+0000'
+COMMISSION_SENT_AT='2026-05-16T00:00:00+0000'
+COMMISSION_REPORTED_AT=''
+COMMISSION_REVIEWED_AT=''
+COMMISSION_REVIEW_VERDICT=''
 COMMISSION_SUPERSEDED_BY=''
 LOCALRUN
 
@@ -331,7 +373,48 @@ assert_contains "$status" "Target repo: $TEAM_A" "status should expose target re
 assert_contains "$status" "Run status: reported" "status should show reported run"
 ```
 
-- [ ] **Step 2: Add missing-route negative notify assertion**
+- [ ] **Step 2: Add target-repo notify assertion**
+
+Append a second run in the same fixture to prove `commission consumer notify` also works from Team A's target repo through local `.commission/` fallback, not only through Team B's Consumer route:
+
+```zsh
+cd "$TEAM_A"
+mkdir -p .commission/staging
+write_request .commission/staging/request-2.md
+"$ROOT/scripts/commission" commissioner send-consumer --prompt-file .commission/staging/request-2.md >/dev/null
+
+report2="$TEAM_A/.commission/sessions/$session_id/runs/002/consumer-report.md"
+/bin/cat > "$report2" <<REPORT2
+# Consumer Report
+
+Status: DONE
+Goal: Add checklist support to Team A todo app
+Slice: Add the minimal checklist model
+
+## Acceptance Results
+- Consumer target repo is Team A. PASS - notify ran from $TEAM_A.
+- Team B entry cwd does not receive protocol truth state. PASS - route is not needed from Team A.
+
+## Files Changed
+None
+
+## Verification
+- Command: fixture
+- Result: PASS
+
+## Deviations
+None
+
+## Residual Risks
+None
+REPORT2
+
+notify_from_a="$("$ROOT/scripts/commission" consumer notify)"
+assert_contains "$notify_from_a" "Consumer's Report sent" "notify should work from target repo local state"
+assert_contains "$(/bin/cat "$TEAM_A/.commission/sessions/$session_id/runs/002/run.env")" "COMMISSION_RUN_STATUS='reported'" "Team A second run should be reported from target repo"
+```
+
+- [ ] **Step 3: Add missing-route negative notify assertion**
 
 Append a separate fixture check:
 
@@ -347,11 +430,39 @@ assert_eq "1" "$missing_route_code" "notify without route should fail clearly"
 assert_contains "$missing_route" "Reconnect with \$commission-connect <pin>" "missing route should tell Consumer to reconnect"
 ```
 
-- [ ] **Step 3: Implement notify with route-first precedence**
+- [ ] **Step 4: Implement notify with route-first precedence**
 
 Resolve `~/.commission/consumers/<current-cwd-key>.env` first. If it exists, `cd` to `COMMISSION_COMMISSIONER_ROOT` from that route. Only when no Consumer route exists may notify use local `.commission/` for the current cwd. Validate report sections before setting Team A's run status to `reported`.
 
-- [ ] **Step 4: Implement review and status**
+If the active run's `consumer-report.md` is missing, print the required report template and exit non-zero before changing `run.env` or notifying the Commissioner:
+
+```text
+# Consumer Report
+
+Status: DONE|BLOCKED
+Goal:
+Slice:
+
+## Acceptance Results
+- <criterion>: PASS|FAIL - <evidence>
+
+## Files Changed
+- <path>
+
+## Verification
+- Command: <command>
+- Result: PASS|FAIL
+
+## Deviations
+None
+
+## Residual Risks
+None
+```
+
+Add a focused assertion that removes Team A's `consumer-report.md`, runs `commission consumer notify` from the Consumer entry cwd, verifies a non-zero exit and template output, and verifies the active run status remains unchanged.
+
+- [ ] **Step 5: Implement review and status**
 
 `commission commissioner review` records verdict and review file under the active run. `commission status` prints:
 
@@ -367,13 +478,49 @@ Run status: <run-status>
 Next: <next-action>
 ```
 
-- [ ] **Step 5: Implement doctor**
+- [ ] **Step 6: Add reset safety and route-cleanup test**
+
+Create `tests/commission_reset_test.sh` with a fixture that writes local `.commission/` state for Team A, unrelated `.commission/` state for Team B, and route files under `COMMISSION_ROUTING_DIR` for both roots. Add assertions that:
+
+- `commission-reset "$TEAM_B/.commission"` from Team A exits non-zero and leaves both directories and all route files intact.
+- `commission-reset "$PWD/.commission"` rejects a symlinked `.commission` directory.
+- `commission-reset "$PWD/.commission"` from Team A removes only Team A's `.commission/`.
+- Matching pin and Consumer routes whose `COMMISSION_COMMISSIONER_ROOT` equals Team A are removed.
+- Unrelated Team B local state and unrelated route files remain.
+
+Use exact route-file env keys from the Commission State Contract so the reset implementation exercises the same parser as `scripts/commission`.
+
+- [ ] **Step 7: Add Commission doctor diagnostics test**
+
+Extend `tests/doctor_test.sh` with a Commission fixture that sets `COMMISSION_ROUTING_DIR`, `COMMISSION_SCRIPT_ROOT`, `ADL_CODEX_SKILLS_DIR="$TMP/home/.codex/skills"`, and `ADL_CLAUDE_SKILLS_DIR="$TMP/home/.claude/skills"`. Add assertions that:
+
+- `commission doctor` reports cwd, CLI version, routing dir, Ghostty adapter path, missing `.commission/`, and absent session before start.
+- After `commission commissioner start`, doctor reports `.commission/`, session id, pin, target repo, Commissioner transport, and no Consumer transport.
+- When both terminal ids are edited to match in `session.env`, doctor prints the Commission-specific refresh warning.
+- A Codex-installed `commission` script reports `global.marker: present (<codex-skills>/commission/.commission-framework)`.
+- A Claude-installed `commission` script reports `global.marker: present (<claude-skills>/commission/.commission-framework)`.
+
+To exercise Codex-vs-Claude path detection, run `.install.sh --codex --update` and `.install.sh --claude --update` with temporary skill roots, then invoke the installed `commission/scripts/commission doctor` from each root. Do not read or write real user skill directories.
+
+- [ ] **Step 8: Implement doctor**
 
 `commission doctor` reports cwd, `.commission` presence, session state, target repo, routing dir, Ghostty adapter, and installed marker. Detect the installed runtime from `SCRIPT_PATH`: `.claude/skills` uses the Claude skill root; otherwise Codex uses the Codex skill root.
 
-- [ ] **Step 6: Implement reset**
+- [ ] **Step 9: Implement reset**
 
-Create `scripts/commission-reset` mirroring `scripts/adl-reset` safety: accept only `"$PWD/.commission"`, reject symlinks and non-directories, remove matching pin and consumer routes whose Commissioner root equals current cwd, then remove local `.commission/`.
+Create `scripts/commission-reset` mirroring `scripts/adl-reset` safety: accept only `"$PWD/.commission"`, reject symlinks and non-directories, use `COMMISSION_ROUTING_DIR` when set and otherwise `~/.commission`, remove matching pin and consumer routes whose Commissioner root equals current cwd, then remove local `.commission/`.
+
+- [ ] **Step 10: Run state, diagnostics, and reset tests**
+
+Run:
+
+```text
+rtk tests/commission_state_test.sh
+rtk tests/commission_reset_test.sh
+rtk tests/doctor_test.sh
+```
+
+Expected: pass after `scripts/commission` and `scripts/commission-reset` are implemented.
 
 ## Task 4: Add Ghostty Role Support
 
@@ -477,6 +624,7 @@ Expected:
 ```text
 Running adl_reset_test.sh
 Running cli_state_test.sh
+Running commission_reset_test.sh
 Running commission_state_test.sh
 Running doctor_test.sh
 Running ghostty_adapter_test.sh

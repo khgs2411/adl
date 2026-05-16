@@ -20,21 +20,23 @@ die_transport() {
 capture_dry_run() {
   local role="$1"
   local role_upper="${role:u}"
+  local prefix="ADL"
+  [[ "$role" == "commissioner" || "$role" == "consumer" ]] && prefix="COMMISSION"
   if [[ -n "${ADL_GHOSTTY_DRY_RUN_TERMINAL_ID:-}" ]]; then
-    print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"
-    print -r -- "ADL_${role_upper}_TERMINAL_ID='$ADL_GHOSTTY_DRY_RUN_TERMINAL_ID'"
-    print -r -- "ADL_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"
+    print -r -- "${prefix}_${role_upper}_ADAPTER='ghostty-macos'"
+    print -r -- "${prefix}_${role_upper}_TERMINAL_ID='$ADL_GHOSTTY_DRY_RUN_TERMINAL_ID'"
+    print -r -- "${prefix}_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"
     return
   fi
-  print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"
-  print -r -- "ADL_${role_upper}_TERMINAL_ID='dry-run-${role}-terminal'"
-  print -r -- "ADL_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"
+  print -r -- "${prefix}_${role_upper}_ADAPTER='ghostty-macos'"
+  print -r -- "${prefix}_${role_upper}_TERMINAL_ID='dry-run-${role}-terminal'"
+  print -r -- "${prefix}_${role_upper}_LABEL='Ghostty dry-run ${role} terminal'"
 }
 
 case "$cmd" in
   capture-focused)
     role="${2:-}"
-    [[ "$role" == "architect" || "$role" == "dev" ]] || die_transport "Usage: ghostty-macos capture-focused architect|dev"
+    [[ "$role" == "architect" || "$role" == "dev" || "$role" == "commissioner" || "$role" == "consumer" ]] || die_transport "Usage: ghostty-macos capture-focused architect|dev|commissioner|consumer"
     if [[ "${ADL_GHOSTTY_DRY_RUN:-0}" == "1" ]]; then
       capture_dry_run "$role"
       exit 0
@@ -50,9 +52,11 @@ APPLESCRIPT
 )" || die_transport "Ghostty capture failed. Grant automation permission for osascript to control Ghostty, then refresh."
     [[ -n "$term_id" ]] || die_transport "Ghostty capture returned an empty terminal id"
     role_upper="${role:u}"
-    print -r -- "ADL_${role_upper}_ADAPTER='ghostty-macos'"
-    print -r -- "ADL_${role_upper}_TERMINAL_ID='$term_id'"
-    print -r -- "ADL_${role_upper}_LABEL='Ghostty terminal $term_id'"
+    prefix="ADL"
+    [[ "$role" == "commissioner" || "$role" == "consumer" ]] && prefix="COMMISSION"
+    print -r -- "${prefix}_${role_upper}_ADAPTER='ghostty-macos'"
+    print -r -- "${prefix}_${role_upper}_TERMINAL_ID='$term_id'"
+    print -r -- "${prefix}_${role_upper}_LABEL='Ghostty terminal $term_id'"
     ;;
   send)
     terminal_id="${2:-}"
@@ -103,6 +107,6 @@ APPLESCRIPT
     log_event "send.ok terminal=$terminal_id"
     ;;
   *)
-    die_transport "Usage: ghostty-macos capture-focused architect|dev | send <terminal-id> <message>"
+    die_transport "Usage: ghostty-macos capture-focused architect|dev|commissioner|consumer | send <terminal-id> <message>"
     ;;
 esac
